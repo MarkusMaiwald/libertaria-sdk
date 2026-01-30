@@ -1,0 +1,6 @@
+[submodule "vendor/argon2"]
+	path = vendor/argon2
+	url = https://github.com/P-H-C/phc-winner-argon2.git
+[submodule "vendor/liboqs"]
+	path = vendor/liboqs
+	url = https://github.com/open-quantum-safe/liboqs.git
