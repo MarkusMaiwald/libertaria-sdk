@@ -143,17 +143,36 @@ pub fn build(b: *std.Build) void {
     // L1 PQXDH tests (Phase 3)
     // ========================================================================
     const l1_pqxdh_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/pqxdh.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_pqxdh_mod.addIncludePath(b.path("vendor/liboqs/install/include"));
+    l1_pqxdh_mod.addLibraryPath(b.path("vendor/liboqs/install/lib"));
+    l1_pqxdh_mod.linkSystemLibrary("oqs", .{ .needed = true });
+    // Consuming artifacts must linkLibC()
+
+    // Import PQXDH into main L1 module
+    l1_mod.addImport("pqxdh", l1_pqxdh_mod);
+
+    // Tests (root is test_pqxdh.zig)
+    const l1_pqxdh_tests_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/test_pqxdh.zig"),
         .target = target,
         .optimize = optimize,
     });
+    // Tests import the library module 'pqxdh' (relative import works too, but module is cleaner if we use @import("pqxdh"))
+    // But test_pqxdh.zig uses @import("pqxdh.zig") which is relative file import.
+    // If we use relative import, the test module must be able to resolve pqxdh.zig.
+    // Since they are in same dir, relative import works.
+    // BUT the artifact compiled from test_pqxdh.zig needs to link liboqs because it effectively includes pqxdh.zig code.
 
     const l1_pqxdh_tests = b.addTest(.{
-        .root_module = l1_pqxdh_mod,
+        .root_module = l1_pqxdh_tests_mod,
     });
     l1_pqxdh_tests.linkLibC();
     l1_pqxdh_tests.addIncludePath(b.path("vendor/liboqs/install/include"));
-    l1_pqxdh_tests.addLibraryPath(b.path("vendor/liboqs/install/lib")); // For liboqs.a
+    l1_pqxdh_tests.addLibraryPath(b.path("vendor/liboqs/install/lib"));
     l1_pqxdh_tests.linkSystemLibrary("oqs");
     const run_l1_pqxdh_tests = b.addRunArtifact(l1_pqxdh_tests);
 

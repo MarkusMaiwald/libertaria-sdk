@@ -13,7 +13,12 @@ const crypto = std.crypto;
 
 // Ensure crypto FFI exports are compiled when this module is used
 // This makes Zig-exported C functions available to C code
+// Ensure crypto FFI exports are compiled when this module is used
+// This makes Zig-exported C functions available to C code
 const _ = @import("crypto_exports");
+
+// Post-Quantum XDH (RFC-0830)
+pub const pqxdh = @import("pqxdh");
 
 /// RFC-0830 Section 2.6: WORLD_PUBLIC_KEY
 /// This is the well-known public key used for World Feed encryption.
@@ -27,9 +32,9 @@ pub const WORLD_PUBLIC_KEY: [32]u8 = [_]u8{
 
 /// Encrypted payload structure
 pub const EncryptedPayload = struct {
-    ephemeral_pubkey: [32]u8,      // Sender's ephemeral public key
-    nonce: [24]u8,                  // XChaCha20 nonce (never reused)
-    ciphertext: []u8,               // Encrypted data + 16-byte auth tag
+    ephemeral_pubkey: [32]u8, // Sender's ephemeral public key
+    nonce: [24]u8, // XChaCha20 nonce (never reused)
+    ciphertext: []u8, // Encrypted data + 16-byte auth tag
 
     /// Free ciphertext memory
     pub fn deinit(self: *EncryptedPayload, allocator: std.mem.Allocator) void {
