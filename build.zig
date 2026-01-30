@@ -134,16 +134,59 @@ pub fn build(b: *std.Build) void {
     const run_l1_prekey_tests = b.addRunArtifact(l1_prekey_tests);
 
     // L1 DID tests (Phase 2D)
+    // L1 DID tests (Phase 2D)
     const l1_did_tests = b.addTest(.{
         .root_module = l1_did_mod,
     });
     const run_l1_did_tests = b.addRunArtifact(l1_did_tests);
 
+    // Link time module to l1_vector_mod
+    // ========================================================================
+    // Time Module (L0)
+    // ========================================================================
+    const time_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/time.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // L1 Vector tests (Phase 3C)
+    const l1_vector_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/vector.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_vector_mod.addImport("time", time_mod);
+
+    const l1_vector_tests = b.addTest(.{
+        .root_module = l1_vector_mod,
+    });
+    // Add Argon2 support for vector tests (via entropy.zig)
+    l1_vector_tests.addCSourceFiles(.{
+        .files = &.{
+            "vendor/argon2/src/argon2.c",
+            "vendor/argon2/src/core.c",
+            "vendor/argon2/src/blake2/blake2b.c",
+            "vendor/argon2/src/thread.c",
+            "vendor/argon2/src/encoding.c",
+            "vendor/argon2/src/opt.c",
+        },
+        .flags = &.{
+            "-std=c99",
+            "-O3",
+            "-fPIC",
+            "-DHAVE_PTHREAD",
+        },
+    });
+    l1_vector_tests.addIncludePath(b.path("vendor/argon2/include"));
+    l1_vector_tests.linkLibC();
+    const run_l1_vector_tests = b.addRunArtifact(l1_vector_tests);
+
     // NOTE: Phase 3 (Full Kyber tests) deferred to separate build invocation
     // See: zig build test-l1-phase3 (requires static library linking fix)
 
-    // Test step (runs Phase 2B + 2C + 2D tests: pure Zig + Argon2)
-    const test_step = b.step("test", "Run Phase 2B + 2C + 2D SDK tests (pure Zig + Argon2)");
+    // Test step (runs Phase 2B + 2C + 2D + 3C SDK tests)
+    const test_step = b.step("test", "Run SDK tests");
     test_step.dependOn(&run_crypto_tests.step);
     test_step.dependOn(&run_crypto_ffi_tests.step);
     test_step.dependOn(&run_l0_tests.step);
@@ -151,6 +194,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_entropy_tests.step);
     test_step.dependOn(&run_l1_prekey_tests.step);
     test_step.dependOn(&run_l1_did_tests.step);
+    test_step.dependOn(&run_l1_vector_tests.step);
 
     // ========================================================================
     // Examples

@@ -3,15 +3,15 @@
 //! This module implements the core LWF frame structure for L0 transport.
 //!
 //! Key features:
-//! - Fixed-size header (64 bytes)
-//! - Variable payload (up to 8900 bytes based on frame class)
+//! - Fixed-size header (72 bytes)
+//! - Variable payload (up to 8828 bytes based on frame class)
 //! - Fixed-size trailer (36 bytes)
 //! - Checksum verification (CRC32-C)
 //! - Signature support (Ed25519)
 //!
 //! Frame structure:
 //! ┌──────────────────┐
-//! │  Header (64B)    │
+//! │  Header (72B)    │
 //! ├──────────────────┤
 //! │  Payload (var)   │
 //! ├──────────────────┤
@@ -22,11 +22,11 @@ const std = @import("std");
 
 /// RFC-0000 Section 4.1: Frame size classes
 pub const FrameClass = enum(u8) {
-    micro = 0x00,      // 128 bytes
-    tiny = 0x01,       // 512 bytes
-    standard = 0x02,   // 1350 bytes (default)
-    large = 0x03,      // 4096 bytes
-    jumbo = 0x04,      // 9000 bytes
+    micro = 0x00, // 128 bytes
+    tiny = 0x01, // 512 bytes
+    standard = 0x02, // 1350 bytes (default)
+    large = 0x03, // 4096 bytes
+    jumbo = 0x04, // 9000 bytes
 
     pub fn maxPayloadSize(self: FrameClass) usize {
         return switch (self) {
@@ -41,29 +41,29 @@ pub const FrameClass = enum(u8) {
 
 /// RFC-0000 Section 4.3: Frame flags
 pub const LWFFlags = struct {
-    pub const ENCRYPTED: u8 = 0x01;        // Payload is encrypted
-    pub const SIGNED: u8 = 0x02;           // Trailer has signature
-    pub const RELAYABLE: u8 = 0x04;        // Can be relayed by nodes
-    pub const HAS_ENTROPY: u8 = 0x08;      // Includes Entropy Stamp
-    pub const FRAGMENTED: u8 = 0x10;       // Part of fragmented message
-    pub const PRIORITY: u8 = 0x20;         // High-priority frame
+    pub const ENCRYPTED: u8 = 0x01; // Payload is encrypted
+    pub const SIGNED: u8 = 0x02; // Trailer has signature
+    pub const RELAYABLE: u8 = 0x04; // Can be relayed by nodes
+    pub const HAS_ENTROPY: u8 = 0x08; // Includes Entropy Stamp
+    pub const FRAGMENTED: u8 = 0x10; // Part of fragmented message
+    pub const PRIORITY: u8 = 0x20; // High-priority frame
 };
 
-/// RFC-0000 Section 4.2: LWF Header (64 bytes fixed)
-pub const LWFHeader = extern struct {
-    magic: [4]u8,               // "LWF\0"
-    version: u8,                // 0x01
-    flags: u8,                  // Bitfield (see LWFFlags)
-    service_type: u16,          // Big-endian, 0x0A00-0x0AFF for Feed
-    source_hint: [20]u8,        // Blake3 truncated DID hint
-    dest_hint: [20]u8,          // Blake3 truncated DID hint
-    sequence: u32,              // Big-endian, anti-replay counter
-    timestamp: u64,             // Big-endian, Unix epoch milliseconds
-    payload_len: u16,           // Big-endian, actual payload size
-    entropy_difficulty: u8,     // Entropy Stamp difficulty (0-255)
-    frame_class: u8,            // FrameClass enum value
+/// RFC-0000 Section 4.2: LWF Header (72 bytes fixed)
+pub const LWFHeader = struct {
+    magic: [4]u8, // "LWF\0"
+    version: u8, // 0x01
+    flags: u8, // Bitfield (see LWFFlags)
+    service_type: u16, // Big-endian, 0x0A00-0x0AFF for Feed
+    source_hint: [24]u8, // Blake3 truncated DID hint (192-bit)
+    dest_hint: [24]u8, // Blake3 truncated DID hint (192-bit)
+    sequence: u32, // Big-endian, anti-replay counter
+    timestamp: u64, // Big-endian, nanoseconds since epoch
+    payload_len: u16, // Big-endian, actual payload size
+    entropy_difficulty: u8, // Entropy Stamp difficulty (0-255)
+    frame_class: u8, // FrameClass enum value
 
-    pub const SIZE: usize = 64;
+    pub const SIZE: usize = 72;
 
     /// Initialize header with default values
     pub fn init() LWFHeader {
@@ -72,8 +72,8 @@ pub const LWFHeader = extern struct {
             .version = 0x01,
             .flags = 0,
             .service_type = 0,
-            .source_hint = [_]u8{0} ** 20,
-            .dest_hint = [_]u8{0} ** 20,
+            .source_hint = [_]u8{0} ** 24,
+            .dest_hint = [_]u8{0} ** 24,
             .sequence = 0,
             .timestamp = 0,
             .payload_len = 0,
@@ -88,8 +88,8 @@ pub const LWFHeader = extern struct {
         return std.mem.eql(u8, &self.magic, &expected_magic) and self.version == 0x01;
     }
 
-    /// Serialize header to exactly 64 bytes (no padding)
-    pub fn toBytes(self: *const LWFHeader, buffer: *[64]u8) void {
+    /// Serialize header to exactly 72 bytes
+    pub fn toBytes(self: *const LWFHeader, buffer: *[72]u8) void {
         var offset: usize = 0;
 
         // magic: [4]u8
@@ -104,28 +104,28 @@ pub const LWFHeader = extern struct {
         buffer[offset] = self.flags;
         offset += 1;
 
-        // service_type: u16 (already big-endian, copy bytes directly)
-        @memcpy(buffer[offset..][0..2], std.mem.asBytes(&self.service_type));
+        // service_type: u16 (big-endian)
+        std.mem.writeInt(u16, buffer[offset..][0..2], self.service_type, .big);
         offset += 2;
 
-        // source_hint: [20]u8
-        @memcpy(buffer[offset..][0..20], &self.source_hint);
-        offset += 20;
+        // source_hint: [24]u8
+        @memcpy(buffer[offset..][0..24], &self.source_hint);
+        offset += 24;
 
-        // dest_hint: [20]u8
-        @memcpy(buffer[offset..][0..20], &self.dest_hint);
-        offset += 20;
+        // dest_hint: [24]u8
+        @memcpy(buffer[offset..][0..24], &self.dest_hint);
+        offset += 24;
 
-        // sequence: u32 (already big-endian, copy bytes directly)
-        @memcpy(buffer[offset..][0..4], std.mem.asBytes(&self.sequence));
+        // sequence: u32 (big-endian)
+        std.mem.writeInt(u32, buffer[offset..][0..4], self.sequence, .big);
         offset += 4;
 
-        // timestamp: u64 (already big-endian, copy bytes directly)
-        @memcpy(buffer[offset..][0..8], std.mem.asBytes(&self.timestamp));
+        // timestamp: u64 (big-endian)
+        std.mem.writeInt(u64, buffer[offset..][0..8], self.timestamp, .big);
         offset += 8;
 
-        // payload_len: u16 (already big-endian, copy bytes directly)
-        @memcpy(buffer[offset..][0..2], std.mem.asBytes(&self.payload_len));
+        // payload_len: u16 (big-endian)
+        std.mem.writeInt(u16, buffer[offset..][0..2], self.payload_len, .big);
         offset += 2;
 
         // entropy_difficulty: u8
@@ -134,59 +134,59 @@ pub const LWFHeader = extern struct {
 
         // frame_class: u8
         buffer[offset] = self.frame_class;
-        // offset += 1; // Final field, no need to increment
+        offset += 1;
 
-        std.debug.assert(offset + 1 == 64); // Verify we wrote exactly 64 bytes
+        std.debug.assert(offset == 72);
     }
 
-    /// Deserialize header from exactly 64 bytes
-    pub fn fromBytes(buffer: *const [64]u8) LWFHeader {
+    /// Deserialize header from exactly 72 bytes
+    pub fn fromBytes(buffer: *const [72]u8) LWFHeader {
         var header: LWFHeader = undefined;
         var offset: usize = 0;
 
-        // magic: [4]u8
+        // magic
         @memcpy(&header.magic, buffer[offset..][0..4]);
         offset += 4;
 
-        // version: u8
+        // version
         header.version = buffer[offset];
         offset += 1;
 
-        // flags: u8
+        // flags
         header.flags = buffer[offset];
         offset += 1;
 
-        // service_type: u16 (already big-endian, copy bytes directly)
-        @memcpy(std.mem.asBytes(&header.service_type), buffer[offset..][0..2]);
+        // service_type
+        header.service_type = std.mem.readInt(u16, buffer[offset..][0..2], .big);
         offset += 2;
 
-        // source_hint: [20]u8
-        @memcpy(&header.source_hint, buffer[offset..][0..20]);
-        offset += 20;
+        // source_hint
+        @memcpy(&header.source_hint, buffer[offset..][0..24]);
+        offset += 24;
 
-        // dest_hint: [20]u8
-        @memcpy(&header.dest_hint, buffer[offset..][0..20]);
-        offset += 20;
+        // dest_hint
+        @memcpy(&header.dest_hint, buffer[offset..][0..24]);
+        offset += 24;
 
-        // sequence: u32 (already big-endian, copy bytes directly)
-        @memcpy(std.mem.asBytes(&header.sequence), buffer[offset..][0..4]);
+        // sequence
+        header.sequence = std.mem.readInt(u32, buffer[offset..][0..4], .big);
         offset += 4;
 
-        // timestamp: u64 (already big-endian, copy bytes directly)
-        @memcpy(std.mem.asBytes(&header.timestamp), buffer[offset..][0..8]);
+        // timestamp
+        header.timestamp = std.mem.readInt(u64, buffer[offset..][0..8], .big);
         offset += 8;
 
-        // payload_len: u16 (already big-endian, copy bytes directly)
-        @memcpy(std.mem.asBytes(&header.payload_len), buffer[offset..][0..2]);
+        // payload_len
+        header.payload_len = std.mem.readInt(u16, buffer[offset..][0..2], .big);
         offset += 2;
 
-        // entropy_difficulty: u8
+        // entropy
         header.entropy_difficulty = buffer[offset];
         offset += 1;
 
-        // frame_class: u8
+        // frame_class
         header.frame_class = buffer[offset];
-        // offset += 1; // Final field
+        offset += 1;
 
         return header;
     }
@@ -194,8 +194,8 @@ pub const LWFHeader = extern struct {
 
 /// RFC-0000 Section 4.7: LWF Trailer (36 bytes fixed)
 pub const LWFTrailer = extern struct {
-    signature: [32]u8,          // Ed25519 signature (or zeros if not signed)
-    checksum: u32,              // CRC32-C, big-endian
+    signature: [32]u8, // Ed25519 signature (or zeros if not signed)
+    checksum: u32, // CRC32-C, big-endian
 
     pub const SIZE: usize = 36;
 
@@ -272,18 +272,18 @@ pub const LWFFrame = struct {
         const total_size = self.size();
         var buffer = try allocator.alloc(u8, total_size);
 
-        // Serialize header (exactly 64 bytes)
-        var header_bytes: [64]u8 = undefined;
+        // Serialize header (exactly 72 bytes)
+        var header_bytes: [72]u8 = undefined;
         self.header.toBytes(&header_bytes);
-        @memcpy(buffer[0..64], &header_bytes);
+        @memcpy(buffer[0..72], &header_bytes);
 
         // Copy payload
-        @memcpy(buffer[64 .. 64 + self.payload.len], self.payload);
+        @memcpy(buffer[72 .. 72 + self.payload.len], self.payload);
 
         // Serialize trailer (exactly 36 bytes)
         var trailer_bytes: [36]u8 = undefined;
         self.trailer.toBytes(&trailer_bytes);
-        const trailer_start = 64 + self.payload.len;
+        const trailer_start = 72 + self.payload.len;
         @memcpy(buffer[trailer_start .. trailer_start + 36], &trailer_bytes);
 
         return buffer;
@@ -292,13 +292,13 @@ pub const LWFFrame = struct {
     /// Decode frame from bytes (allocates payload)
     pub fn decode(allocator: std.mem.Allocator, data: []const u8) !LWFFrame {
         // Minimum frame size check
-        if (data.len < 64 + 36) {
+        if (data.len < 72 + 36) {
             return error.FrameTooSmall;
         }
 
-        // Parse header (first 64 bytes)
-        var header_bytes: [64]u8 = undefined;
-        @memcpy(&header_bytes, data[0..64]);
+        // Parse header (first 72 bytes)
+        var header_bytes: [72]u8 = undefined;
+        @memcpy(&header_bytes, data[0..72]);
         const header = LWFHeader.fromBytes(&header_bytes);
 
         // Validate header
@@ -307,19 +307,19 @@ pub const LWFFrame = struct {
         }
 
         // Extract payload length
-        const payload_len = @as(usize, @intCast(std.mem.bigToNative(u16, header.payload_len)));
+        const payload_len = @as(usize, @intCast(header.payload_len));
 
         // Verify frame size matches
-        if (data.len < 64 + payload_len + 36) {
+        if (data.len < 72 + payload_len + 36) {
             return error.InvalidPayloadLength;
         }
 
         // Allocate and copy payload
         const payload = try allocator.alloc(u8, payload_len);
-        @memcpy(payload, data[64 .. 64 + payload_len]);
+        @memcpy(payload, data[72 .. 72 + payload_len]);
 
         // Parse trailer
-        const trailer_start = 64 + payload_len;
+        const trailer_start = 72 + payload_len;
         var trailer_bytes: [36]u8 = undefined;
         @memcpy(&trailer_bytes, data[trailer_start .. trailer_start + 36]);
         const trailer = LWFTrailer.fromBytes(&trailer_bytes);
@@ -335,8 +335,8 @@ pub const LWFFrame = struct {
     pub fn calculateChecksum(self: *const LWFFrame) u32 {
         var hasher = std.hash.Crc32.init();
 
-        // Hash header (exactly 64 bytes)
-        var header_bytes: [64]u8 = undefined;
+        // Hash header (exactly 72 bytes)
+        var header_bytes: [72]u8 = undefined;
         self.header.toBytes(&header_bytes);
         hasher.update(&header_bytes);
 
@@ -370,7 +370,7 @@ test "LWFFrame creation" {
     var frame = try LWFFrame.init(allocator, 100);
     defer frame.deinit(allocator);
 
-    try std.testing.expectEqual(@as(usize, 64 + 100 + 36), frame.size());
+    try std.testing.expectEqual(@as(usize, 72 + 100 + 36), frame.size());
     try std.testing.expectEqual(@as(u8, 'L'), frame.header.magic[0]);
     try std.testing.expectEqual(@as(u8, 0x01), frame.header.version);
 }
@@ -383,9 +383,9 @@ test "LWFFrame encode/decode roundtrip" {
     defer frame.deinit(allocator);
 
     // Populate frame
-    frame.header.service_type = std.mem.nativeToBig(u16, 0x0A00); // FEED_WORLD_POST
-    frame.header.payload_len = std.mem.nativeToBig(u16, 10);
-    frame.header.timestamp = std.mem.nativeToBig(u64, 1234567890);
+    frame.header.service_type = 0x0A00; // FEED_WORLD_POST
+    frame.header.payload_len = 10;
+    frame.header.timestamp = 1234567890;
     @memcpy(frame.payload, "HelloWorld");
     frame.updateChecksum();
 
@@ -393,7 +393,7 @@ test "LWFFrame encode/decode roundtrip" {
     const encoded = try frame.encode(allocator);
     defer allocator.free(encoded);
 
-    try std.testing.expectEqual(@as(usize, 64 + 10 + 36), encoded.len);
+    try std.testing.expectEqual(@as(usize, 72 + 10 + 36), encoded.len);
 
     // Decode
     var decoded = try LWFFrame.decode(allocator, encoded);
@@ -425,9 +425,9 @@ test "LWFFrame checksum verification" {
 }
 
 test "FrameClass payload sizes" {
-    try std.testing.expectEqual(@as(usize, 28), FrameClass.micro.maxPayloadSize());
-    try std.testing.expectEqual(@as(usize, 412), FrameClass.tiny.maxPayloadSize());
-    try std.testing.expectEqual(@as(usize, 1250), FrameClass.standard.maxPayloadSize());
-    try std.testing.expectEqual(@as(usize, 3996), FrameClass.large.maxPayloadSize());
-    try std.testing.expectEqual(@as(usize, 8900), FrameClass.jumbo.maxPayloadSize());
+    try std.testing.expectEqual(@as(usize, 20), FrameClass.micro.maxPayloadSize());
+    try std.testing.expectEqual(@as(usize, 404), FrameClass.tiny.maxPayloadSize());
+    try std.testing.expectEqual(@as(usize, 1242), FrameClass.standard.maxPayloadSize());
+    try std.testing.expectEqual(@as(usize, 3988), FrameClass.large.maxPayloadSize());
+    try std.testing.expectEqual(@as(usize, 8892), FrameClass.jumbo.maxPayloadSize());
 }
