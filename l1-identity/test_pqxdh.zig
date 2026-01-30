@@ -9,60 +9,12 @@ const pqxdh = @import("pqxdh.zig");
 const testing = std.testing;
 
 // ============================================================================
-// STUB: ML-KEM-768 Functions (for testing without liboqs)
+// Real LibOQS Functions (via C Import)
 // ============================================================================
-// These will be replaced with real liboqs FFI once library is built
 
-export fn OQS_KEM_kyber768_keypair(
-    public_key: ?*u8,
-    secret_key: ?*u8,
-) c_int {
-    // Stub: Fill with deterministic test data
-    if (public_key) |pk| {
-        const pk_slice: [*]u8 = @ptrCast(pk);
-        @memset(pk_slice[0..pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE], 0xAA);
-    }
-    if (secret_key) |sk| {
-        const sk_slice: [*]u8 = @ptrCast(sk);
-        @memset(sk_slice[0..pqxdh.ML_KEM_768.SECRET_KEY_SIZE], 0xBB);
-    }
-    return 0; // Success
-}
-
-export fn OQS_KEM_kyber768_encaps(
-    ciphertext: ?*u8,
-    shared_secret: ?*u8,
-    public_key: ?*const u8,
-) c_int {
-    _ = public_key; // Use in real impl
-
-    // Stub: Generate deterministic shared secret + ciphertext
-    if (ciphertext) |ct| {
-        const ct_slice: [*]u8 = @ptrCast(ct);
-        @memset(ct_slice[0..pqxdh.ML_KEM_768.CIPHERTEXT_SIZE], 0xCC);
-    }
-    if (shared_secret) |ss| {
-        const ss_slice: [*]u8 = @ptrCast(ss);
-        @memset(ss_slice[0..pqxdh.ML_KEM_768.SHARED_SECRET_SIZE], 0xDD);
-    }
-    return 0; // Success
-}
-
-export fn OQS_KEM_kyber768_decaps(
-    shared_secret: ?*u8,
-    ciphertext: ?*const u8,
-    secret_key: ?*const u8,
-) c_int {
-    _ = ciphertext; // Use in real impl
-    _ = secret_key; // Use in real impl
-
-    // Stub: Must return SAME shared secret as encaps for protocol to work
-    if (shared_secret) |ss| {
-        const ss_slice: [*]u8 = @ptrCast(ss);
-        @memset(ss_slice[0..pqxdh.ML_KEM_768.SHARED_SECRET_SIZE], 0xDD);
-    }
-    return 0; // Success
-}
+const c = @cImport({
+    @cInclude("oqs/oqs.h");
+});
 
 // ============================================================================
 // Helper: Generate Test Keypairs
@@ -132,7 +84,7 @@ test "PQXDHInitialMessage serialization roundtrip" {
     try testing.expectEqualSlices(u8, &msg.mlkem_ciphertext, &restored.mlkem_ciphertext);
 }
 
-test "PQXDH full handshake roundtrip (stubbed ML-KEM)" {
+test "PQXDH full handshake roundtrip (real ML-KEM)" {
     const allocator = testing.allocator;
 
     // === Bob's Setup ===
@@ -151,7 +103,7 @@ test "PQXDH full handshake roundtrip (stubbed ML-KEM)" {
     // Generate Bob's ML-KEM keypair (stubbed)
     var bob_mlkem_public: [pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8 = undefined;
     var bob_mlkem_private: [pqxdh.ML_KEM_768.SECRET_KEY_SIZE]u8 = undefined;
-    const kem_result = OQS_KEM_kyber768_keypair(&bob_mlkem_public[0], &bob_mlkem_private[0]);
+    const kem_result = c.OQS_KEM_ml_kem_768_keypair(&bob_mlkem_public[0], &bob_mlkem_private[0]);
     try testing.expectEqual(@as(c_int, 0), kem_result);
 
     // Create Bob's prekey bundle (signature stubbed for now)
@@ -211,6 +163,6 @@ test "PQXDH error: invalid ML-KEM encapsulation" {
     var public_key: [pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8 = undefined;
     var secret_key: [pqxdh.ML_KEM_768.SECRET_KEY_SIZE]u8 = undefined;
 
-    const result = OQS_KEM_kyber768_keypair(&public_key[0], &secret_key[0]);
+    const result = c.OQS_KEM_ml_kem_768_keypair(&public_key[0], &secret_key[0]);
     try testing.expectEqual(@as(c_int, 0), result);
 }

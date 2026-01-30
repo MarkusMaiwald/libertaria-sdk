@@ -21,20 +21,20 @@ const crypto = std.crypto;
 // FIPS 203: ML-KEM-768 (post-standardization naming for Kyber-768)
 
 /// ML-KEM-768 key generation
-extern "c" fn OQS_KEM_kyber768_keypair(
+extern "c" fn OQS_KEM_ml_kem_768_keypair(
     public_key: ?*u8,
     secret_key: ?*u8,
 ) c_int;
 
 /// ML-KEM-768 encapsulation (creates shared secret + ciphertext)
-extern "c" fn OQS_KEM_kyber768_encaps(
+extern "c" fn OQS_KEM_ml_kem_768_encaps(
     ciphertext: ?*u8,
     shared_secret: ?*u8,
     public_key: ?*const u8,
 ) c_int;
 
 /// ML-KEM-768 decapsulation (recovers shared secret from ciphertext)
-extern "c" fn OQS_KEM_kyber768_decaps(
+extern "c" fn OQS_KEM_ml_kem_768_decaps(
     shared_secret: ?*u8,
     ciphertext: ?*const u8,
     secret_key: ?*const u8,
@@ -246,7 +246,7 @@ pub fn initiator(
     var kem_ct: [ML_KEM_768.CIPHERTEXT_SIZE]u8 = undefined;
 
     // Call liboqs ML-KEM encapsulation
-    const kem_result = OQS_KEM_kyber768_encaps(
+    const kem_result = OQS_KEM_ml_kem_768_encaps(
         @ptrCast(&kem_ct),
         @ptrCast(&kem_ss),
         @ptrCast(&bob_prekey_bundle.signed_prekey_mlkem),
@@ -332,7 +332,7 @@ pub fn responder(
     var kem_ss: [ML_KEM_768.SHARED_SECRET_SIZE]u8 = undefined;
 
     // Call liboqs ML-KEM decapsulation
-    const kem_result = OQS_KEM_kyber768_decaps(
+    const kem_result = OQS_KEM_ml_kem_768_decaps(
         @ptrCast(&kem_ss),
         @ptrCast(&alice_initial_message.mlkem_ciphertext),
         @ptrCast(&bob_mlkem_private),

@@ -152,6 +152,9 @@ pub fn build(b: *std.Build) void {
         .root_module = l1_pqxdh_mod,
     });
     l1_pqxdh_tests.linkLibC();
+    l1_pqxdh_tests.addIncludePath(b.path("vendor/liboqs/install/include"));
+    l1_pqxdh_tests.addLibraryPath(b.path("vendor/liboqs/install/lib")); // For liboqs.a
+    l1_pqxdh_tests.linkSystemLibrary("oqs");
     const run_l1_pqxdh_tests = b.addRunArtifact(l1_pqxdh_tests);
 
     // Link time module to l1_vector_mod
