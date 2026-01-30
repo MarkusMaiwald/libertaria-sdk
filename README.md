@@ -68,16 +68,25 @@ The Libertaria SDK provides the foundational L0 (Transport) and L1 (Identity/Cry
 ## Layers
 
 ### L0: Transport Layer
-**Module:** `l0-transport/`
+**Module:** `l0-transport/` | **Index:** `l0_transport.zig`
 
 Implements the core wire protocol:
-- **LWF Frame Codec** - Encode/decode wire frames
-- **UTCP** - Reliable transport over UDP (future)
+- **LWF Frame Codec** - Encode/decode wire frames (RFC-0000, 72-byte header)
+- **Sovereign Time** - L0 transport timestamps (u64 nanoseconds)
 - **Frame Validation** - Checksum, signature verification
-- **Priority Queues** - Traffic shaping
+- **Priority Queues** - Traffic shaping (future)
 
 **Key Files:**
+- `l0_transport.zig` - **Sovereign Index** (re-exports all L0 modules)
 - `lwf.zig` - LWF frame structure and codec
+- `time.zig` - Time primitives
+
+**Quick Start:**
+```zig
+const l0 = @import("l0_transport.zig");
+var frame = try l0.lwf.LWFFrame.init(allocator, 1024);
+frame.header.timestamp = l0.time.nowNanoseconds();
+```
 - `utcp.zig` - UTCP transport (future)
 - `validation.zig` - Frame validation logic
 
