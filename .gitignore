@@ -1,7 +1,29 @@
-zig-cache/
+# Zig
 zig-out/
-vendor/liboqs/build/
-vendor/liboqs/install/
-vendor/argon2/build/
-*.o
+.zig-cache/
+
+# Binaries & Executables
+test_zig_sha3
+test_zig_shake
+*.exe
+*.dll
+*.so
+*.dylib
 *.a
+*.lib
+
+# Operational Reports & Stories
+REPORTS/
+STORIES/
+*.report.md
+*.story.md
+logs/
+*.log
+
+# Editor & OS
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+*~

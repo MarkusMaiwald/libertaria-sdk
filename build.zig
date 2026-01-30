@@ -49,6 +49,21 @@ pub fn build(b: *std.Build) void {
     l1_mod.addImport("fips202_bridge", crypto_fips202_mod);
 
     // ========================================================================
+    // L1 PQXDH Module (Phase 3) - Core Dependency
+    // ========================================================================
+    const l1_pqxdh_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/pqxdh.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_pqxdh_mod.addIncludePath(b.path("vendor/liboqs/install/include"));
+    l1_pqxdh_mod.addLibraryPath(b.path("vendor/liboqs/install/lib"));
+    l1_pqxdh_mod.linkSystemLibrary("oqs", .{ .needed = true });
+
+    // Ensure l1_mod uses PQXDH
+    l1_mod.addImport("pqxdh", l1_pqxdh_mod);
+
+    // ========================================================================
     // L1 Modules: SoulKey, Entropy, Prekey (Phase 2B + 2C)
     // ========================================================================
     const l1_soulkey_mod = b.createModule(.{
@@ -56,6 +71,8 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    // SoulKey needs PQXDH for deterministic generation
+    l1_soulkey_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     const l1_entropy_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/entropy.zig"),
@@ -68,12 +85,14 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    l1_prekey_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     const l1_did_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/did.zig"),
         .target = target,
         .optimize = optimize,
     });
+    l1_did_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
@@ -101,6 +120,8 @@ pub fn build(b: *std.Build) void {
     const l1_soulkey_tests = b.addTest(.{
         .root_module = l1_soulkey_mod,
     });
+    // Tests linking liboqs effectively happen via the module now, but we also link LibC
+    l1_soulkey_tests.linkLibC();
     const run_l1_soulkey_tests = b.addRunArtifact(l1_soulkey_tests);
 
     // L1 Entropy tests (Phase 2B)
@@ -131,29 +152,17 @@ pub fn build(b: *std.Build) void {
     const l1_prekey_tests = b.addTest(.{
         .root_module = l1_prekey_mod,
     });
+    l1_prekey_tests.linkLibC();
     const run_l1_prekey_tests = b.addRunArtifact(l1_prekey_tests);
 
     // L1 DID tests (Phase 2D)
     const l1_did_tests = b.addTest(.{
         .root_module = l1_did_mod,
     });
+    l1_did_tests.linkLibC();
     const run_l1_did_tests = b.addRunArtifact(l1_did_tests);
 
-    // ========================================================================
-    // L1 PQXDH tests (Phase 3)
-    // ========================================================================
-    const l1_pqxdh_mod = b.createModule(.{
-        .root_source_file = b.path("l1-identity/pqxdh.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    l1_pqxdh_mod.addIncludePath(b.path("vendor/liboqs/install/include"));
-    l1_pqxdh_mod.addLibraryPath(b.path("vendor/liboqs/install/lib"));
-    l1_pqxdh_mod.linkSystemLibrary("oqs", .{ .needed = true });
-    // Consuming artifacts must linkLibC()
-
     // Import PQXDH into main L1 module
-    l1_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     // Tests (root is test_pqxdh.zig)
     const l1_pqxdh_tests_mod = b.createModule(.{
@@ -193,6 +202,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     l1_vector_mod.addImport("time", time_mod);
+    l1_vector_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     const l1_vector_tests = b.addTest(.{
         .root_module = l1_vector_mod,
@@ -218,7 +228,7 @@ pub fn build(b: *std.Build) void {
     l1_vector_tests.linkLibC();
     const run_l1_vector_tests = b.addRunArtifact(l1_vector_tests);
 
-    // NOTE: Phase 3 PQXDH uses stubbed ML-KEM. Real liboqs integration pending.
+    // NOTE: Phase 3 PQXDH uses ML-KEM-768 via liboqs (integrated).
 
     // Test step (runs Phase 2B + 2C + 2D + 3C SDK tests)
     const test_step = b.step("test", "Run SDK tests");

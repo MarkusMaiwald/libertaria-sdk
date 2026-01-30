@@ -14,6 +14,7 @@
 
 const std = @import("std");
 const crypto = std.crypto;
+const pqxdh = @import("pqxdh");
 
 // ============================================================================
 // SoulKey: Core Identity Keypair
@@ -29,9 +30,9 @@ pub const SoulKey = struct {
     x25519_public: [32]u8,
 
     /// ML-KEM-768 post-quantum keypair
-    /// (populated when liboqs is linked)
-    mlkem_private: [2400]u8,
-    mlkem_public: [1184]u8,
+    /// (populated deterministically from seed via liboqs)
+    mlkem_private: [pqxdh.ML_KEM_768.SECRET_KEY_SIZE]u8,
+    mlkem_public: [pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8,
 
     /// DID: SHA256 hash of (ed25519_public || x25519_public || mlkem_public)
     did: [32]u8,
@@ -46,12 +47,11 @@ pub const SoulKey = struct {
         var key: SoulKey = undefined;
 
         // === Ed25519 generation ===
-        // Direct seed → keypair (per Ed25519 spec)
-        key.ed25519_private = seed.*;
-
-        // For Ed25519: seed is the private key, derive public key via hashing
-        // This is simplified; Phase 3 will use proper Ed25519 key derivation
-        crypto.hash.sha2.Sha256.hash(seed, &key.ed25519_public, .{});
+        // Properly derive keypair from seed using standard Ed25519
+        const ed_kp = try crypto.sign.Ed25519.KeyPair.generateDeterministic(seed.*);
+        // ed_kp.secret_key.seed() returns the seed used.
+        key.ed25519_private = ed_kp.secret_key.seed();
+        key.ed25519_public = ed_kp.public_key.bytes;
 
         // === X25519 generation ===
         // Derive X25519 private from seed via domain-separated hashing
@@ -65,18 +65,27 @@ pub const SoulKey = struct {
         key.x25519_private = x25519_seed;
         key.x25519_public = try crypto.dh.X25519.recoverPublicKey(x25519_seed);
 
-        // === ML-KEM-768 generation (placeholder) ===
-        // TODO: Generate via liboqs when linked (Phase 3: PQXDH)
-        @memset(&key.mlkem_private, 0);
-        @memset(&key.mlkem_public, 0);
+        // === ML-KEM-768 generation ===
+        // Derive dedicated seed for ML-KEM to ensure domain separation
+        var mlkem_seed: [32]u8 = undefined;
+        var mlkem_input: [32 + 30]u8 = undefined;
+        @memcpy(mlkem_input[0..32], seed);
+        @memcpy(mlkem_input[32..62], "libertaria-soulkey-mlkem768-v1");
+        crypto.hash.sha2.Sha256.hash(&mlkem_input, &mlkem_seed, .{});
+
+        // Use custom thread-safe deterministic generation (via liboqs RNG override)
+        // Note: This relies on liboqs being linked via build.zig
+        const kp = try pqxdh.generateKeypairFromSeed(mlkem_seed);
+        key.mlkem_public = kp.public_key;
+        key.mlkem_private = kp.secret_key;
 
         // === DID generation ===
         // Hash all public keys together: ed25519 || x25519 || mlkem
-        // Using SHA256 (Blake3 unavailable in Zig stdlib)
-        var did_input: [32 + 32 + 1184]u8 = undefined;
+        // Using SHA256
+        var did_input: [32 + 32 + pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8 = undefined;
         @memcpy(did_input[0..32], &key.ed25519_public);
         @memcpy(did_input[32..64], &key.x25519_public);
-        @memcpy(did_input[64..1248], &key.mlkem_public);
+        @memcpy(did_input[64..], &key.mlkem_public);
         crypto.hash.sha2.Sha256.hash(&did_input, &key.did, .{});
 
         key.created_at = @intCast(std.time.timestamp());
@@ -92,34 +101,24 @@ pub const SoulKey = struct {
         return fromSeed(&seed);
     }
 
-    /// Sign a message (HMAC-SHA256 for Phase 2C, full Ed25519 in Phase 3)
-    /// Phase 2C uses simplified signing with 32-byte seed.
-    /// Phase 3 will upgrade to proper Ed25519 signatures.
+    /// Sign a message using Ed25519
     pub fn sign(self: *const SoulKey, message: []const u8) ![64]u8 {
-        var signature: [64]u8 = undefined;
-        // Use HMAC-SHA256 for simplified signing in Phase 2C
-        // Signature: HMAC-SHA256(private_key, message) || HMAC-SHA256(public_key, message)
-        var hmac1: [32]u8 = undefined;
-        var hmac2: [32]u8 = undefined;
+        // Reconstruct KeyPair from stored seed/public
+        // Note: Ed25519.KeyPair can be formed from just seed if needed, but we have both.
+        const kp = try crypto.sign.Ed25519.KeyPair.generateDeterministic(self.ed25519_private);
+        // Verify public matches? (Optional sanity check)
 
-        crypto.auth.hmac.sha2.HmacSha256.create(&hmac1, message, &self.ed25519_private);
-        crypto.auth.hmac.sha2.HmacSha256.create(&hmac2, message, &self.ed25519_public);
-
-        @memcpy(signature[0..32], &hmac1);
-        @memcpy(signature[32..64], &hmac2);
-
-        return signature;
+        const signature = try kp.sign(message, null);
+        return signature.toBytes();
     }
 
-    /// Verify a signature (HMAC-SHA256 for Phase 2C, full Ed25519 in Phase 3)
+    /// Verify a signature using Ed25519
     pub fn verify(public_key: [32]u8, message: []const u8, signature: [64]u8) !bool {
-        // Phase 2C verification: check that signature matches HMAC pattern
-        // In Phase 3, this will be upgraded to Ed25519 verification
-        var expected_hmac: [32]u8 = undefined;
-        crypto.auth.hmac.sha2.HmacSha256.create(&expected_hmac, message, &public_key);
+        const sig = crypto.sign.Ed25519.Signature.fromBytes(signature);
+        const pk = crypto.sign.Ed25519.PublicKey.fromBytes(public_key) catch return false;
 
-        // Verify second half of signature (HMAC with public key)
-        return std.mem.eql(u8, signature[32..64], &expected_hmac);
+        sig.verify(message, pk) catch return false;
+        return true;
     }
 
     /// Derive a shared secret via X25519 key agreement
@@ -292,4 +291,35 @@ test "did creation" {
     const did = DID.create(key.ed25519_public, key.x25519_public, key.mlkem_public);
 
     try std.testing.expectEqualSlices(u8, &key.did, &did.bytes);
+}
+
+test "SoulKey deterministic generation" {
+    var seed: [32]u8 = [_]u8{0x42} ** 32;
+
+    const key1 = try SoulKey.fromSeed(&seed);
+    const key2 = try SoulKey.fromSeed(&seed);
+
+    try std.testing.expectEqualSlices(u8, &key1.ed25519_private, &key2.ed25519_private);
+    try std.testing.expectEqualSlices(u8, &key1.ed25519_public, &key2.ed25519_public);
+    try std.testing.expectEqualSlices(u8, &key1.x25519_private, &key2.x25519_private);
+    try std.testing.expectEqualSlices(u8, &key1.x25519_public, &key2.x25519_public);
+    try std.testing.expectEqualSlices(u8, &key1.mlkem_private, &key2.mlkem_private);
+    try std.testing.expectEqualSlices(u8, &key1.mlkem_public, &key2.mlkem_public);
+    try std.testing.expectEqualSlices(u8, &key1.did, &key2.did);
+}
+
+test "SoulKey signing and verification" {
+    const key = try SoulKey.generate();
+    const message = "Hello, Libertaria!";
+
+    const signature = try key.sign(message);
+    const valid = try SoulKey.verify(key.ed25519_public, message, signature);
+
+    try std.testing.expect(valid);
+
+    // Check invalid signature
+    var invalid_sig = signature;
+    invalid_sig[0] ^= 0xFF; // Flip a bit
+    const invalid = try SoulKey.verify(key.ed25519_public, message, invalid_sig);
+    try std.testing.expect(!invalid);
 }

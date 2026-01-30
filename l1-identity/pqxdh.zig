@@ -40,6 +40,61 @@ extern "c" fn OQS_KEM_ml_kem_768_decaps(
     secret_key: ?*const u8,
 ) c_int;
 
+/// Switch liboqs RNG algorithm (e.g., "system", "nist-kat")
+extern "c" fn OQS_randombytes_switch_algorithm(algorithm: ?[*:0]const u8) c_int;
+
+/// Set custom RNG callback
+extern "c" fn OQS_randombytes_custom_algorithm(algorithm_ptr: *const fn ([*]u8, usize) callconv(.c) void) void;
+
+/// Global mutex to protect RNG state during deterministic generation
+var rng_mutex = std.Thread.Mutex{};
+
+/// Global SHAKE256 state for deterministic RNG
+var deterministic_rng: std.crypto.hash.sha3.Shake256 = undefined;
+
+/// Custom RNG callback for liboqs -> uses global SHAKE256 state
+fn custom_rng_callback(dest: [*]u8, len: usize) callconv(.c) void {
+    deterministic_rng.squeeze(dest[0..len]);
+}
+
+pub const KeyPair = struct {
+    public_key: [ML_KEM_768.PUBLIC_KEY_SIZE]u8,
+    secret_key: [ML_KEM_768.SECRET_KEY_SIZE]u8,
+};
+
+/// Generate ML-KEM-768 keypair deterministically from a 32-byte seed
+/// Thread-safe via global mutex (liboqs RNG is global state)
+pub fn generateKeypairFromSeed(seed: [32]u8) !KeyPair {
+    rng_mutex.lock();
+    defer rng_mutex.unlock();
+
+    // 1. Initialize deterministic RNG with seed
+    deterministic_rng = std.crypto.hash.sha3.Shake256.init(.{});
+    // Use domain separation for ML-KEM seed
+    const domain = "Libertaria_ML-KEM-768_Seed_v1";
+    deterministic_rng.update(domain);
+    deterministic_rng.update(&seed);
+
+    // 2. Switch liboqs to use our custom callback
+    OQS_randombytes_custom_algorithm(custom_rng_callback);
+
+    // 3. Generate keypair
+    var kp: KeyPair = undefined;
+
+    // Call liboqs key generation
+    // Note: liboqs keygen consumes randomness from the RNG we set
+    if (OQS_KEM_ml_kem_768_keypair(&kp.public_key[0], &kp.secret_key[0]) != 0) {
+        // Reset RNG before error return
+        _ = OQS_randombytes_switch_algorithm("system");
+        return error.KeyGenerationFailed;
+    }
+
+    // 4. Restore system RNG (important!)
+    _ = OQS_randombytes_switch_algorithm("system");
+
+    return kp;
+}
+
 // ============================================================================
 // ML-KEM-768 Parameters (NIST FIPS 203)
 // ============================================================================

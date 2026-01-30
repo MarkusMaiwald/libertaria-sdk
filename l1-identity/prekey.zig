@@ -11,6 +11,7 @@
 
 const std = @import("std");
 const crypto = std.crypto;
+const pqxdh = @import("pqxdh");
 
 // ============================================================================
 // Constants (Prekey Validity Periods)
@@ -68,33 +69,10 @@ pub const SignedPrekey = struct {
         @memcpy(message[0..32], &public_key);
         std.mem.writeInt(u64, message[32..40][0..8], now, .big);
 
-        // Sign with identity key
-        // For Phase 2C: use placeholder signature
-        // Phase 3 will integrate full Ed25519 signing via SoulKey
-        var signature: [64]u8 = undefined;
-
-        // Create a deterministic signature-like value for Phase 2C
-        // This is NOT a real cryptographic signature; just a placeholder
-        // Phase 3 will replace this with proper Ed25519 signatures
-        var combined: [32 + 40 + 8]u8 = undefined;
-        @memcpy(combined[0..32], &identity_private);
-        @memcpy(combined[32..72], &message);
-        std.mem.writeInt(u64, combined[72..80][0..8], now, .big);
-
-        // Hash the combined material to get signature-like bytes
-        var hash1: [32]u8 = undefined;
-        crypto.hash.sha2.Sha256.hash(combined[0..80], &hash1, .{});
-
-        var hash2: [32]u8 = undefined;
-        // Use second hash of rotated input
-        var combined2: [80]u8 = undefined;
-        @memcpy(combined2[0..72], combined[8..]);
-        @memcpy(combined2[72..80], combined[0..8]);
-        crypto.hash.sha2.Sha256.hash(&combined2, &hash2, .{});
-
-        // Combine hashes into 64-byte signature
-        @memcpy(signature[0..32], &hash1);
-        @memcpy(signature[32..64], &hash2);
+        // Sign with identity key (Ed25519)
+        // identity_private is the seed
+        const kp = try crypto.sign.Ed25519.KeyPair.generateDeterministic(identity_private);
+        const signature = (try kp.sign(&message, null)).toBytes();
 
         // Calculate expiration (30 days from now)
         const expires_at = now + SIGNED_PREKEY_ROTATION_DAYS * 24 * 60 * 60;
@@ -116,10 +94,7 @@ pub const SignedPrekey = struct {
         identity_public: [32]u8,
         max_age_seconds: i64,
     ) !void {
-        // Phase 2C: Check expiration only
-        // Phase 3 will integrate full Ed25519 signature verification
-        _ = identity_public;
-
+        // 1. Check expiration
         const now: i64 = @intCast(std.time.timestamp());
         const age: i64 = now - @as(i64, @intCast(self.created_at));
 
@@ -131,6 +106,15 @@ pub const SignedPrekey = struct {
         if (age < -60) {
             return error.SignedPrekeyFromFuture;
         }
+
+        // 2. Verify signature
+        var message: [32 + 8]u8 = undefined;
+        @memcpy(message[0..32], &self.public_key);
+        std.mem.writeInt(u64, message[32..40][0..8], self.created_at, .big);
+
+        crypto.sign.Ed25519.verify(self.signature, &message, identity_public) catch {
+            return error.InvalidSignature;
+        };
     }
 
     /// Check if prekey is approaching expiration (within grace period)
@@ -243,7 +227,7 @@ pub const PrekeyBundle = struct {
     signed_prekey_signature: [64]u8,
 
     /// Kyber-768 public key (post-quantum, optional)
-    kyber_public: [1184]u8,
+    mlkem_public: [pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8,
 
     /// One-time prekeys (array of X25519 keys)
     one_time_keys: std.ArrayList(OneTimePrekey),
@@ -289,7 +273,7 @@ pub const PrekeyBundle = struct {
             .identity_key = [32]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, // placeholder
             .signed_prekey = signed_prekey,
             .signed_prekey_signature = [64]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, // placeholder
-            .kyber_public = [1184]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 } ** 1, // placeholder
+            .mlkem_public = [1]u8{0} ** pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE, // placeholder
             .one_time_keys = one_time_keys,
             .did = [32]u8{ 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }, // placeholder
             .created_at = now,

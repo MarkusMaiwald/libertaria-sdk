@@ -19,6 +19,7 @@
 
 const std = @import("std");
 const crypto = std.crypto;
+const pqxdh = @import("pqxdh");
 
 // ============================================================================
 // Constants
@@ -32,9 +33,60 @@ pub const DEFAULT_CACHE_TTL_SECONDS: u64 = 3600;
 
 /// Supported DID methods
 pub const DIDMethod = enum {
-    mosaic,      // did:mosaic:*
-    libertaria,  // did:libertaria:*
-    other,       // Future methods, opaque handling
+    mosaic, // did:mosaic:*
+    libertaria, // did:libertaria:*
+    other, // Future methods, opaque handling
+};
+
+// ============================================================================
+// DID Document: Public Identity State
+// ============================================================================
+
+/// Represents the resolved public state of an identity
+pub const DIDDocument = struct {
+    /// The DID identifier (hash of keys)
+    id: DIDIdentifier,
+
+    /// Public Keys (Must match hash in ID)
+    ed25519_public: [32]u8,
+    x25519_public: [32]u8,
+    mlkem_public: [pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8,
+
+    /// Metadata
+    created_at: u64,
+    version: u32 = 1,
+
+    /// Self-signature by Ed25519 key (binds ID to keys)
+    /// Signed data: id.method_specific_id || created_at || version
+    signature: [64]u8,
+
+    /// Verify that this document is valid (hash matches ID, signature valid)
+    pub fn verify(self: *const DIDDocument) !void {
+        // 1. Verify ID hash
+        var did_input: [32 + 32 + pqxdh.ML_KEM_768.PUBLIC_KEY_SIZE]u8 = undefined;
+        @memcpy(did_input[0..32], &self.ed25519_public);
+        @memcpy(did_input[32..64], &self.x25519_public);
+        @memcpy(did_input[64..], &self.mlkem_public);
+
+        var calculated_hash: [32]u8 = undefined;
+        crypto.hash.sha2.Sha256.hash(&did_input, &calculated_hash, .{});
+
+        if (!std.mem.eql(u8, &calculated_hash, &self.id.method_specific_id)) {
+            return error.InvalidDIDHash;
+        }
+
+        // 2. Verify Signature
+        // Data: method_specific_id (32) + created_at (8) + version (4)
+        var sig_data: [32 + 8 + 4]u8 = undefined;
+        @memcpy(sig_data[0..32], &self.id.method_specific_id);
+        std.mem.writeInt(u64, sig_data[32..40], self.created_at, .little);
+        std.mem.writeInt(u32, sig_data[40..44], self.version, .little);
+
+        // Verification (using Ed25519)
+        const sig = crypto.sign.Ed25519.Signature.fromBytes(self.signature);
+        const pk = try crypto.sign.Ed25519.PublicKey.fromBytes(self.ed25519_public);
+        try sig.verify(&sig_data, pk);
+    }
 };
 
 // ============================================================================
@@ -136,9 +188,9 @@ pub const DIDIdentifier = struct {
 
 pub const DIDCacheEntry = struct {
     did: DIDIdentifier,
-    metadata: []const u8,       // Opaque bytes (method-specific)
-    ttl_seconds: u64,           // Entry TTL
-    created_at: u64,            // Unix timestamp
+    metadata: []const u8, // Opaque bytes (method-specific)
+    ttl_seconds: u64, // Entry TTL
+    created_at: u64, // Unix timestamp
 
     /// Check if this cache entry has expired
     pub fn isExpired(self: *const DIDCacheEntry, now: u64) bool {
@@ -359,8 +411,8 @@ test "DID cache pruning" {
     const did1 = try DIDIdentifier.parse("did:mosaic:prune1");
     const did2 = try DIDIdentifier.parse("did:mosaic:prune2");
 
-    try cache.store(&did1, "data1", 1);      // Short TTL
-    try cache.store(&did2, "data2", 3600);   // Long TTL
+    try cache.store(&did1, "data1", 1); // Short TTL
+    try cache.store(&did2, "data2", 3600); // Long TTL
 
     const initial_count = cache.count();
     try std.testing.expect(initial_count == 2);
