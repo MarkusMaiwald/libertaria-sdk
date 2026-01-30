@@ -11,6 +11,10 @@
 const std = @import("std");
 const crypto = std.crypto;
 
+// Ensure crypto FFI exports are compiled when this module is used
+// This makes Zig-exported C functions available to C code
+const _ = @import("crypto_exports");
+
 /// RFC-0830 Section 2.6: WORLD_PUBLIC_KEY
 /// This is the well-known public key used for World Feed encryption.
 /// Everyone can decrypt World posts, but ISPs see only ciphertext.

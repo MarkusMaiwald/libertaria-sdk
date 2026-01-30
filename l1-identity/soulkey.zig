@@ -88,7 +88,7 @@ pub const SoulKey = struct {
     pub fn generate() !SoulKey {
         var seed: [32]u8 = undefined;
         crypto.random.bytes(&seed);
-        defer crypto.utils.secureZero(u8, &seed);
+        defer crypto.secureZero(u8, &seed);
         return fromSeed(&seed);
     }
 
@@ -199,9 +199,9 @@ pub const SoulKey = struct {
 
     /// Zeroize private key material (constant-time)
     pub fn zeroize(self: *SoulKey) void {
-        crypto.utils.secureZero(u8, &self.ed25519_private);
-        crypto.utils.secureZero(u8, &self.x25519_private);
-        crypto.utils.secureZero(u8, &self.mlkem_private);
+        crypto.secureZero(u8, &self.ed25519_private);
+        crypto.secureZero(u8, &self.x25519_private);
+        crypto.secureZero(u8, &self.mlkem_private);
     }
 
     /// Get the DID string (base58 or hex)

@@ -134,11 +134,25 @@ pub fn build(b: *std.Build) void {
     const run_l1_prekey_tests = b.addRunArtifact(l1_prekey_tests);
 
     // L1 DID tests (Phase 2D)
-    // L1 DID tests (Phase 2D)
     const l1_did_tests = b.addTest(.{
         .root_module = l1_did_mod,
     });
     const run_l1_did_tests = b.addRunArtifact(l1_did_tests);
+
+    // ========================================================================
+    // L1 PQXDH tests (Phase 3)
+    // ========================================================================
+    const l1_pqxdh_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/test_pqxdh.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const l1_pqxdh_tests = b.addTest(.{
+        .root_module = l1_pqxdh_mod,
+    });
+    l1_pqxdh_tests.linkLibC();
+    const run_l1_pqxdh_tests = b.addRunArtifact(l1_pqxdh_tests);
 
     // Link time module to l1_vector_mod
     // ========================================================================
@@ -182,8 +196,7 @@ pub fn build(b: *std.Build) void {
     l1_vector_tests.linkLibC();
     const run_l1_vector_tests = b.addRunArtifact(l1_vector_tests);
 
-    // NOTE: Phase 3 (Full Kyber tests) deferred to separate build invocation
-    // See: zig build test-l1-phase3 (requires static library linking fix)
+    // NOTE: Phase 3 PQXDH uses stubbed ML-KEM. Real liboqs integration pending.
 
     // Test step (runs Phase 2B + 2C + 2D + 3C SDK tests)
     const test_step = b.step("test", "Run SDK tests");
@@ -195,6 +208,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_prekey_tests.step);
     test_step.dependOn(&run_l1_did_tests.step);
     test_step.dependOn(&run_l1_vector_tests.step);
+    test_step.dependOn(&run_l1_pqxdh_tests.step);
 
     // ========================================================================
     // Examples
