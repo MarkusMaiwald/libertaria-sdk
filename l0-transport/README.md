@@ -11,33 +11,25 @@
 The L0 Transport layer provides low-level wire protocol implementations for the Libertaria network. It handles packet framing, serialization, and transport-layer timestamps.
 
 ## Components
-
+ 
 ### LWF (Libertaria Wire Frame) - `lwf.zig`
 **RFC:** RFC-0000  
-**Size:** 72-byte header + payload + 36-byte trailer
-
-Wire protocol implementation with:
-- Fixed 72-byte header (24-byte DID hints, u64 nanosecond timestamp)
-- Variable payload (1092-8892 bytes depending on frame class)
-- 36-byte trailer (Ed25519 signature + CRC32 checksum)
-- Frame classes (Constrained, Standard, Ethernet, Bulk, Jumbo)
-
-**Key Types:**
-- `LWFHeader` - 72-byte fixed header
-- `LWFTrailer` - 36-byte signature + checksum
-- `LWFFrame` - Complete frame wrapper
-- `FrameClass` - Size negotiation enum
+Wire protocol implementation for fixed-size headers and variable payloads. Supports CRC32-C and Ed25519.
 
 ### Time - `time.zig`
-**RFC:** RFC-0105 (L0 component)  
-**Precision:** u64 nanoseconds (584-year range)
+**RFC:** RFC-0105  
+Nanosecond precision transport-layer time primitives.
 
-Transport-layer time primitives:
-- `u64` nanosecond timestamps for drift detection
-- Monotonic clock access
-- Replay protection timestamps
+### UTCP (Unreliable Transport Protocol) - `utcp/socket.zig`
+**RFC:** RFC-0010  
+Fast-path UDP wrapper for LWF frames. Features rapid entropy validation (DoS defense) before deep parsing.
 
-**Note:** L1 uses full `SovereignTimestamp` (u128 attoseconds) for causal ordering.
+### OPQ (Offline Packet Queue) - `opq/`
+**RFC:** RFC-0020  
+High-resilience store-and-forward mechanism using a **Segmented WAL** (Write-Ahead Log) for 72-96 hour packet retention.
+
+### L0 Service - `service.zig`
+The integrated engine that orchestrates `Network -> UTCP -> OPQ -> Ingestion`. Handles automated maintenance and persona-based policies.
 
 ---
 

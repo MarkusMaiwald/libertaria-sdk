@@ -12,6 +12,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const utcp_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/utcp/socket.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    utcp_mod.addImport("lwf", l0_mod);
+
+    const opq_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/opq.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    opq_mod.addImport("lwf", l0_mod);
+
+    const l0_service_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/service.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l0_service_mod.addImport("lwf", l0_mod);
+    l0_service_mod.addImport("utcp", utcp_mod);
+    l0_service_mod.addImport("opq", opq_mod);
 
     // ========================================================================
     // Crypto: SHA3/SHAKE & FIPS 202
@@ -80,6 +102,9 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // UTCP needs entropy for fast validation
+    utcp_mod.addImport("entropy", l1_entropy_mod);
+
     const l1_prekey_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/prekey.zig"),
         .target = target,
@@ -115,6 +140,24 @@ pub fn build(b: *std.Build) void {
         .root_module = l0_mod,
     });
     const run_l0_tests = b.addRunArtifact(l0_tests);
+
+    // UTCP tests
+    const utcp_tests = b.addTest(.{
+        .root_module = utcp_mod,
+    });
+    const run_utcp_tests = b.addRunArtifact(utcp_tests);
+
+    // OPQ tests
+    const opq_tests = b.addTest(.{
+        .root_module = opq_mod,
+    });
+    const run_opq_tests = b.addRunArtifact(opq_tests);
+
+    // L0 Service tests
+    const l0_service_tests = b.addTest(.{
+        .root_module = l0_service_mod,
+    });
+    const run_l0_service_tests = b.addRunArtifact(l0_service_tests);
 
     // L1 SoulKey tests (Phase 2B)
     const l1_soulkey_tests = b.addTest(.{
@@ -241,6 +284,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_did_tests.step);
     test_step.dependOn(&run_l1_vector_tests.step);
     test_step.dependOn(&run_l1_pqxdh_tests.step);
+    test_step.dependOn(&run_utcp_tests.step);
+    test_step.dependOn(&run_opq_tests.step);
+    test_step.dependOn(&run_l0_service_tests.step);
 
     // ========================================================================
     // Examples
