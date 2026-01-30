@@ -69,6 +69,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const l1_did_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/did.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
     // ========================================================================
@@ -127,17 +133,24 @@ pub fn build(b: *std.Build) void {
     });
     const run_l1_prekey_tests = b.addRunArtifact(l1_prekey_tests);
 
+    // L1 DID tests (Phase 2D)
+    const l1_did_tests = b.addTest(.{
+        .root_module = l1_did_mod,
+    });
+    const run_l1_did_tests = b.addRunArtifact(l1_did_tests);
+
     // NOTE: Phase 3 (Full Kyber tests) deferred to separate build invocation
     // See: zig build test-l1-phase3 (requires static library linking fix)
 
-    // Test step (runs Phase 2B + 2C tests: pure Zig + Argon2)
-    const test_step = b.step("test", "Run Phase 2B + 2C SDK tests (pure Zig + Argon2)");
+    // Test step (runs Phase 2B + 2C + 2D tests: pure Zig + Argon2)
+    const test_step = b.step("test", "Run Phase 2B + 2C + 2D SDK tests (pure Zig + Argon2)");
     test_step.dependOn(&run_crypto_tests.step);
     test_step.dependOn(&run_crypto_ffi_tests.step);
     test_step.dependOn(&run_l0_tests.step);
     test_step.dependOn(&run_l1_soulkey_tests.step);
     test_step.dependOn(&run_l1_entropy_tests.step);
     test_step.dependOn(&run_l1_prekey_tests.step);
+    test_step.dependOn(&run_l1_did_tests.step);
 
     // ========================================================================
     // Examples
