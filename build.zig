@@ -14,6 +14,28 @@ pub fn build(b: *std.Build) void {
     });
 
     // ========================================================================
+    // Crypto: SHA3/SHAKE & FIPS 202
+    // ========================================================================
+    const crypto_shake_mod = b.createModule(.{
+        .root_source_file = b.path("src/crypto/shake.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const crypto_fips202_mod = b.createModule(.{
+        .root_source_file = b.path("src/crypto/fips202_bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const crypto_exports_mod = b.createModule(.{
+        .root_source_file = b.path("src/crypto/exports.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    crypto_exports_mod.addImport("fips202_bridge", crypto_fips202_mod);
+
+    // ========================================================================
     // L1: Identity & Crypto Layer
     // ========================================================================
     const l1_mod = b.createModule(.{
@@ -22,9 +44,46 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // Add crypto modules as imports to L1
+    l1_mod.addImport("shake", crypto_shake_mod);
+    l1_mod.addImport("fips202_bridge", crypto_fips202_mod);
+
     // ========================================================================
-    // Tests
+    // L1 Modules: SoulKey, Entropy, Prekey (Phase 2B + 2C)
     // ========================================================================
+    const l1_soulkey_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/soulkey.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const l1_entropy_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/entropy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const l1_prekey_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/prekey.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ========================================================================
+    // Tests (with C FFI support for Argon2 + liboqs)
+    // ========================================================================
+
+    // Crypto tests (SHA3/SHAKE)
+    const crypto_tests = b.addTest(.{
+        .root_module = crypto_shake_mod,
+    });
+    const run_crypto_tests = b.addRunArtifact(crypto_tests);
+
+    // Crypto FFI bridge tests
+    const crypto_ffi_tests = b.addTest(.{
+        .root_module = crypto_fips202_mod,
+    });
+    const run_crypto_ffi_tests = b.addRunArtifact(crypto_ffi_tests);
 
     // L0 tests
     const l0_tests = b.addTest(.{
@@ -32,16 +91,53 @@ pub fn build(b: *std.Build) void {
     });
     const run_l0_tests = b.addRunArtifact(l0_tests);
 
-    // L1 tests
-    const l1_tests = b.addTest(.{
-        .root_module = l1_mod,
+    // L1 SoulKey tests (Phase 2B)
+    const l1_soulkey_tests = b.addTest(.{
+        .root_module = l1_soulkey_mod,
     });
-    const run_l1_tests = b.addRunArtifact(l1_tests);
+    const run_l1_soulkey_tests = b.addRunArtifact(l1_soulkey_tests);
 
-    // Test step (runs all tests)
-    const test_step = b.step("test", "Run all SDK tests");
+    // L1 Entropy tests (Phase 2B)
+    const l1_entropy_tests = b.addTest(.{
+        .root_module = l1_entropy_mod,
+    });
+    l1_entropy_tests.addCSourceFiles(.{
+        .files = &.{
+            "vendor/argon2/src/argon2.c",
+            "vendor/argon2/src/core.c",
+            "vendor/argon2/src/blake2/blake2b.c",
+            "vendor/argon2/src/thread.c",
+            "vendor/argon2/src/encoding.c",
+            "vendor/argon2/src/opt.c",
+        },
+        .flags = &.{
+            "-std=c99",
+            "-O3",
+            "-fPIC",
+            "-DHAVE_PTHREAD",
+        },
+    });
+    l1_entropy_tests.addIncludePath(b.path("vendor/argon2/include"));
+    l1_entropy_tests.linkLibC();
+    const run_l1_entropy_tests = b.addRunArtifact(l1_entropy_tests);
+
+    // L1 Prekey tests (Phase 2C)
+    const l1_prekey_tests = b.addTest(.{
+        .root_module = l1_prekey_mod,
+    });
+    const run_l1_prekey_tests = b.addRunArtifact(l1_prekey_tests);
+
+    // NOTE: Phase 3 (Full Kyber tests) deferred to separate build invocation
+    // See: zig build test-l1-phase3 (requires static library linking fix)
+
+    // Test step (runs Phase 2B + 2C tests: pure Zig + Argon2)
+    const test_step = b.step("test", "Run Phase 2B + 2C SDK tests (pure Zig + Argon2)");
+    test_step.dependOn(&run_crypto_tests.step);
+    test_step.dependOn(&run_crypto_ffi_tests.step);
     test_step.dependOn(&run_l0_tests.step);
-    test_step.dependOn(&run_l1_tests.step);
+    test_step.dependOn(&run_l1_soulkey_tests.step);
+    test_step.dependOn(&run_l1_entropy_tests.step);
+    test_step.dependOn(&run_l1_prekey_tests.step);
 
     // ========================================================================
     // Examples
