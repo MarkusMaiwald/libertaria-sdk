@@ -27,19 +27,7 @@ const relay_service_mod = @import("relay_service.zig");
 const NodeConfig = config_mod.NodeConfig;
 const UTCP = utcp_mod.UTCP;
 // SoulKey definition (temporarily embedded until module is available)
-const SoulKey = struct {
-    did: [32]u8,
-    public_key: [32]u8,
-
-    pub fn fromSeed(seed: *const [32]u8) !SoulKey {
-        var public_key: [32]u8 = undefined;
-        std.crypto.hash.sha2.Sha256.hash(seed, &public_key, .{});
-        return SoulKey{
-            .did = public_key,
-            .public_key = public_key,
-        };
-    }
-};
+const SoulKey = l1.SoulKey;
 const RiskGraph = qvl.types.RiskGraph;
 const DiscoveryService = discovery_mod.DiscoveryService;
 const PeerTable = peer_table_mod.PeerTable;
@@ -289,15 +277,12 @@ pub const CapsuleNode = struct {
 
                         if (frame.header.service_type == fed.SERVICE_TYPE) {
                             try self.handleFederationMessage(result.sender, frame);
-                        } else if (frame.header.service_type == l0.LWFHeader.ServiceType.RELAY_FORWARD) {
                             // Phase 14: Relay Forwarding
                             if (self.relay_service) |*rs| {
                                 std.log.debug("Relay: Received relay packet from {f}", .{result.sender});
-                                // Mock secret for now (needs ECDH)
-                                const shared_secret = [_]u8{0xAA} ** 32;
 
-                                // Unwrap and forward
-                                if (rs.forwardPacket(frame.payload, shared_secret)) |next_hop_data| {
+                                // Unwrap and forward using our private key (as receiver)
+                                if (rs.forwardPacket(frame.payload, self.identity.x25519_private)) |next_hop_data| {
                                     // next_hop_data.payload is now the INNER payload
                                     const next_node_id = next_hop_data.next_hop;
 
@@ -305,6 +290,8 @@ pub const CapsuleNode = struct {
                                     // TODO: Check if we are final destination (all zeros) handled by forwardPacket
                                     // But forwardPacket returns the result to US to send.
 
+                                    // Check if we are destination handled by forwardPacket via null next_hop logic?
+                                    // forwardPacket returns next_hop. If all zeros, it means LOCAL delivery.
                                     var is_final = true;
                                     for (next_node_id) |b| {
                                         if (b != 0) {
@@ -314,16 +301,18 @@ pub const CapsuleNode = struct {
                                     }
 
                                     if (is_final) {
-                                        // We are the destination!
-                                        // TODO: Process inner payload as a new frame
-                                        std.log.info("Relay: Final Packet Received! Size: {d}", .{next_hop_data.payload.len});
+                                        // Final delivery to US
+                                        std.log.info("Relay: Final Packet Received for Session {x}! Payload Size: {d}", .{ next_hop_data.session_id, next_hop_data.payload.len });
+                                        // TODO: Hand over payload to upper layers (e.g. Chat/Protocol handler)
+                                        // For MVP, just log.
+                                    } else {
                                         // Forward to next hop
-                                        // Need to lookup IP for next_node_id
+                                        // Lookup IP
                                         const next_remote = self.dht.routing_table.findNode(next_node_id);
                                         if (next_remote) |remote| {
                                             // Re-wrap in LWF for transport
                                             try self.utcp.send(remote.address, next_hop_data.payload, l0.LWFHeader.ServiceType.RELAY_FORWARD);
-                                            std.log.info("Relay: Forwarded packet to {f}", .{remote.address});
+                                            std.log.info("Relay: Forwarded packet to {f} (Session {x})", .{ remote.address, next_hop_data.session_id });
                                         } else {
                                             std.log.warn("Relay: Next hop {x} not found in routing table", .{next_node_id[0..4]});
                                         }

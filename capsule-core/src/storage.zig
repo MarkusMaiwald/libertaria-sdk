@@ -56,7 +56,8 @@ pub const StorageService = struct {
             \\     id BLOB PRIMARY KEY,
             \\     address TEXT NOT NULL,
             \\     last_seen INTEGER NOT NULL,
-            \\     seen_count INTEGER DEFAULT 1
+            \\     seen_count INTEGER DEFAULT 1,
+            \\     x25519_key BLOB
             \\ );
             \\ CREATE TABLE IF NOT EXISTS qvl_nodes (
             \\     did BLOB PRIMARY KEY,
@@ -84,8 +85,8 @@ pub const StorageService = struct {
     }
 
     pub fn savePeer(self: *StorageService, node: RemoteNode) !void {
-        const sql = "INSERT INTO peers (id, address, last_seen) VALUES (?, ?, ?) " ++
-            "ON CONFLICT(id) DO UPDATE SET address=excluded.address, last_seen=excluded.last_seen, seen_count=seen_count+1;";
+        const sql = "INSERT INTO peers (id, address, last_seen, x25519_key) VALUES (?, ?, ?, ?) " ++
+            "ON CONFLICT(id) DO UPDATE SET address=excluded.address, last_seen=excluded.last_seen, seen_count=seen_count+1, x25519_key=excluded.x25519_key;";
 
         var stmt: ?*c.sqlite3_stmt = null;
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
@@ -102,11 +103,14 @@ pub const StorageService = struct {
         // Bind Last Seen
         _ = c.sqlite3_bind_int64(stmt, 3, node.last_seen);
 
+        // Bind Key
+        _ = c.sqlite3_bind_blob(stmt, 4, &node.key, 32, null);
+
         if (c.sqlite3_step(stmt) != c.SQLITE_DONE) return error.StepFailed;
     }
 
     pub fn loadPeers(self: *StorageService, allocator: std.mem.Allocator) ![]RemoteNode {
-        const sql = "SELECT id, address, last_seen FROM peers;";
+        const sql = "SELECT id, address, last_seen, x25519_key FROM peers;";
         var stmt: ?*c.sqlite3_stmt = null;
         if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
         defer _ = c.sqlite3_finalize(stmt);
@@ -119,6 +123,8 @@ pub const StorageService = struct {
             const id_len = c.sqlite3_column_bytes(stmt, 0);
             const addr_ptr = c.sqlite3_column_text(stmt, 1);
             const last_seen = c.sqlite3_column_int64(stmt, 2);
+            const key_ptr = c.sqlite3_column_blob(stmt, 3);
+            const key_len = c.sqlite3_column_bytes(stmt, 3);
 
             if (id_len != ID_LEN) continue;
 
@@ -128,6 +134,11 @@ pub const StorageService = struct {
             const addr_str = std.mem.span(addr_ptr);
             node.address = try std.net.Address.parseIp(addr_str, 0); // Port logic handled via federation later
             node.last_seen = last_seen;
+            if (key_len == 32) {
+                @memcpy(&node.key, @as([*]const u8, @ptrCast(key_ptr))[0..32]);
+            } else {
+                @memset(&node.key, 0);
+            }
 
             try list.append(allocator, node);
         }

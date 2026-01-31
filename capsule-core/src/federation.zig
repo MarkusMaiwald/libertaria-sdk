@@ -11,6 +11,7 @@ pub const SERVICE_TYPE: u16 = lwf.LWFHeader.ServiceType.IDENTITY_SIGNAL;
 pub const DhtNode = struct {
     id: [32]u8,
     address: net.Address,
+    key: [32]u8,
 };
 
 pub const SessionState = enum {
@@ -79,6 +80,7 @@ pub const FederationMessage = union(enum) {
                 try writer.writeInt(u16, @intCast(n.nodes.len), .big);
                 for (n.nodes) |node| {
                     try writer.writeAll(&node.id);
+                    try writer.writeAll(&node.key);
                     // For now we only support IPv4 in DHT nodes responses
                     if (node.address.any.family == std.posix.AF.INET) {
                         try writer.writeAll(&std.mem.toBytes(node.address.in.sa.addr));
@@ -143,11 +145,13 @@ pub const FederationMessage = union(enum) {
                 const nodes = try allocator.alloc(DhtNode, count);
                 for (0..count) |i| {
                     const id = try reader.readBytesNoEof(32);
+                    const key = try reader.readBytesNoEof(32);
                     const addr_u32 = try reader.readInt(u32, @import("builtin").target.cpu.arch.endian());
                     const port = try reader.readInt(u16, .big);
                     nodes[i] = .{
                         .id = id,
                         .address = net.Address.initIp4(std.mem.toBytes(addr_u32), port),
+                        .key = key,
                     };
                 }
                 return .{ .dht_nodes = .{ .nodes = nodes } };

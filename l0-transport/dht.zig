@@ -37,6 +37,7 @@ pub const RemoteNode = struct {
     id: NodeId,
     address: net.Address,
     last_seen: i64,
+    key: [32]u8 = [_]u8{0} ** 32, // X25519 Public Key
 };
 
 pub const KBucket = struct {

@@ -30,13 +30,19 @@ pub const RelayService = struct {
 
     /// Forward a relay packet to the next hop
     /// Returns the next hop address and the inner payload
+    /// Forward a relay packet to the next hop
+    /// Returns the next hop address and the inner payload
     pub fn forwardPacket(
         self: *RelayService,
-        packet: relay_mod.RelayPacket,
-        shared_secret: [32]u8,
-    ) !struct { next_hop: [32]u8, payload: []u8 } {
-        // Unwrap the onion layer
-        const result = try self.onion_builder.unwrapLayer(packet, shared_secret);
+        raw_packet: []const u8,
+        receiver_private_key: [32]u8,
+    ) !struct { next_hop: [32]u8, payload: []u8, session_id: [16]u8 } {
+        // Parse the wire packet
+        var packet = try relay_mod.RelayPacket.decode(self.allocator, raw_packet);
+        defer packet.deinit(self.allocator);
+
+        // Unwrap the onion layer (using our private key + packet's ephemeral key)
+        const result = try self.onion_builder.unwrapLayer(packet, receiver_private_key, null);
 
         // Check if next_hop is all zeros (meaning we're the final destination)
         const is_final = blk: {
@@ -48,15 +54,19 @@ pub const RelayService = struct {
 
         if (is_final) {
             // We're the final destination - deliver locally
-            std.log.info("Relay: Final destination reached, delivering payload locally", .{});
+            std.log.info("Relay: Final destination reached for session {x}", .{result.session_id});
             self.packets_dropped += 1; // Not actually dropped, just not forwarded
             return result;
         }
 
         // Forward to next hop
-        std.log.debug("Relay: Forwarding to next hop: {x}", .{std.fmt.fmtSliceHexLower(&result.next_hop)});
+        std.log.debug("Relay: Forwarding session {x} to next hop: {x}", .{ result.session_id, std.fmt.fmtSliceHexLower(&result.next_hop) });
         self.packets_forwarded += 1;
 
+        // Result payload includes the re-wrapped inner onion?
+        // Wait, unwrapLayer returns the decrypted payload.
+        // In onion routing, the decrypted payload IS the inner onion for the next hop.
+        // We just return it. The caller (node.zig) must send it.
         return result;
     }
 

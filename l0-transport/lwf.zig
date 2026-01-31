@@ -8,6 +8,9 @@
 //! - Fixed-size trailer (36 bytes)
 //! - Checksum verification (CRC32-C)
 //! - Signature support (Ed25519)
+//! - Nonce/SessionID Binding:
+//!   Cryptography nonce construction MUST strictly bind to the Session ID.
+//!   Usage: `nonce[0..16] == session_id`, `nonce[16..24] == random/counter`.
 //!
 //! Frame structure:
 //! ┌──────────────────┐

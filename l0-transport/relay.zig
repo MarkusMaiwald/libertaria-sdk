@@ -33,15 +33,14 @@ pub const NextHopHeader = struct {
 /// It effectively contains an encrypted blob that the receiver can decrypt
 /// to reveal the NextHopHeader and the inner Payload.
 pub const RelayPacket = struct {
-    // Public ephemeral key for ECDH could be here if we do per-packet keying,
-    // but typically we use established session keys or pre-keys.
-    // For simplicity V1, we assume a session key exists or use a nonce.
-
-    nonce: [24]u8, // XChaCha20 nonce
+    // X25519 Public Key for ephemeral key agreement
+    ephemeral_key: [32]u8,
+    nonce: [24]u8, // XChaCha20 nonce (SessionID + Random)
     ciphertext: []u8, // Encrypted [NextHopHeader + InnerPayload]
 
     pub fn init(allocator: std.mem.Allocator, size: usize) !RelayPacket {
         return RelayPacket{
+            .ephemeral_key = undefined,
             .nonce = undefined, // To be filled
             .ciphertext = try allocator.alloc(u8, size),
         };
@@ -49,6 +48,31 @@ pub const RelayPacket = struct {
 
     pub fn deinit(self: *RelayPacket, allocator: std.mem.Allocator) void {
         allocator.free(self.ciphertext);
+    }
+
+    /// Serialize to wire format
+    pub fn encode(self: *const RelayPacket, allocator: std.mem.Allocator) ![]u8 {
+        const total_size = 32 + 24 + self.ciphertext.len;
+        var buf = try allocator.alloc(u8, total_size);
+
+        @memcpy(buf[0..32], &self.ephemeral_key);
+        @memcpy(buf[32..56], &self.nonce);
+        @memcpy(buf[56..], self.ciphertext);
+
+        return buf;
+    }
+
+    /// Deserialize from wire format
+    pub fn decode(allocator: std.mem.Allocator, data: []const u8) !RelayPacket {
+        if (data.len < 32 + 24) return error.PacketTooSmall;
+        const ciphertext_len = data.len - 32 - 24;
+
+        var packet = try RelayPacket.init(allocator, ciphertext_len);
+        @memcpy(&packet.ephemeral_key, data[0..32]);
+        @memcpy(&packet.nonce, data[32..56]);
+        @memcpy(packet.ciphertext, data[56..]);
+
+        return packet;
     }
 };
 
@@ -64,13 +88,19 @@ pub const OnionBuilder = struct {
 
     /// Wraps a payload into a single layer of encryption for a specific relay.
     /// In a real onion, this is called iteratively from innermost to outermost.
+    /// Uses ECDH with next_hop_pubkey to derive a shared secret.
     pub fn wrapLayer(
         self: *OnionBuilder,
         payload: []const u8,
         next_hop: [32]u8,
-        shared_secret: [32]u8,
+        next_hop_pubkey: [32]u8,
+        session_id: [16]u8,
     ) !RelayPacket {
-        _ = shared_secret;
+        // 1. Generate Ephemeral Keypair
+        const kp = crypto.dh.X25519.KeyPair.generate();
+
+        // 2. Compute Shared Secret
+        const shared_secret = try crypto.dh.X25519.scalarmult(kp.secret_key, next_hop_pubkey);
         // 1. Construct Cleartext: [NextHop (32) | Payload (N)]
         var cleartext = try self.allocator.alloc(u8, 32 + payload.len);
         defer self.allocator.free(cleartext);
@@ -78,39 +108,72 @@ pub const OnionBuilder = struct {
         @memcpy(cleartext[0..32], &next_hop);
         @memcpy(cleartext[32..], payload);
 
-        // 2. Encrypt
-        var packet = try RelayPacket.init(self.allocator, cleartext.len + 16); // +AuthTag
-        crypto.random.bytes(&packet.nonce);
+        // 2. Encrypt using XChaCha20-Poly1305
+        const tag_len = crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length;
 
-        // Mock Encryption (XChaCha20-Poly1305 would go here)
-        // For MVP structure, we just copy (TODO: Add actual crypto integration)
-        // We simulate "encryption" by XORing with a byte for testing proving modification works
-        for (cleartext, 0..) |b, i| {
-            packet.ciphertext[i] = b ^ 0xFF; // Simple NOT for mock encryption
-        }
-        // Mock Auth Tag
-        @memset(packet.ciphertext[cleartext.len..], 0xAA);
+        var packet = try RelayPacket.init(self.allocator, cleartext.len + tag_len);
+
+        // Store Ephemeral Public Key in Packet
+        @memcpy(&packet.ephemeral_key, &kp.public_key);
+
+        // Nonce Construction: SessionID (16) + Random (8)
+        @memcpy(packet.nonce[0..16], &session_id);
+        crypto.random.bytes(packet.nonce[16..24]);
+
+        var tag: [tag_len]u8 = undefined;
+        crypto.aead.chacha_poly.XChaCha20Poly1305.encrypt(
+            packet.ciphertext[0..cleartext.len],
+            &tag,
+            cleartext,
+            "", // No associated data for now
+            packet.nonce,
+            shared_secret,
+        );
+
+        // Append tag to ciphertext
+        @memcpy(packet.ciphertext[cleartext.len..], &tag);
 
         return packet;
     }
 
     /// Unwraps a single layer (Server/Relay side logic).
+    /// Uses receiver_secret_key (node's private key) to derive shared secret from packet's ephemeral key.
     pub fn unwrapLayer(
         self: *OnionBuilder,
         packet: RelayPacket,
-        shared_secret: [32]u8,
-    ) !struct { next_hop: [32]u8, payload: []u8 } {
-        _ = shared_secret;
+        receiver_secret_key: [32]u8,
+        expected_session_id: ?[16]u8,
+    ) !struct { next_hop: [32]u8, payload: []u8, session_id: [16]u8 } {
+        // 1. Compute Shared Secret from Ephemeral Key
+        const shared_secret = crypto.dh.X25519.scalarmult(receiver_secret_key, packet.ephemeral_key) catch return error.DecryptionFailed;
+        const tag_len = crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length;
+        if (packet.ciphertext.len < 32 + tag_len) return error.DecryptionFailed;
 
-        // Mock Decryption
-        if (packet.ciphertext.len < 32 + 16) return error.DecryptionFailed;
+        // Verify Session ID part of Nonce if provided
+        var session_id: [16]u8 = undefined;
+        @memcpy(&session_id, packet.nonce[0..16]);
 
-        const content_len = packet.ciphertext.len - 16;
-        var cleartext = try self.allocator.alloc(u8, content_len);
-
-        for (0..content_len) |i| {
-            cleartext[i] = packet.ciphertext[i] ^ 0xFF;
+        if (expected_session_id) |expected| {
+            if (!std.mem.eql(u8, &expected, &session_id)) {
+                return error.DecryptionFailed; // Wrong session context
+            }
         }
+
+        const content_len = packet.ciphertext.len - tag_len;
+        var cleartext = try self.allocator.alloc(u8, content_len);
+        defer self.allocator.free(cleartext); // Free after copy
+
+        var tag: [tag_len]u8 = undefined;
+        @memcpy(&tag, packet.ciphertext[content_len..]);
+
+        try crypto.aead.chacha_poly.XChaCha20Poly1305.decrypt(
+            cleartext,
+            packet.ciphertext[0..content_len],
+            tag,
+            "", // Associated data
+            packet.nonce,
+            shared_secret,
+        );
 
         var next_hop: [32]u8 = undefined;
         @memcpy(&next_hop, cleartext[0..32]);
@@ -120,11 +183,10 @@ pub const OnionBuilder = struct {
         const payload = try self.allocator.alloc(u8, payload_len);
         @memcpy(payload, cleartext[32..]);
 
-        self.allocator.free(cleartext);
-
         return .{
             .next_hop = next_hop,
             .payload = payload,
+            .session_id = session_id,
         };
     }
 };
@@ -135,17 +197,24 @@ test "Relay: wrap and unwrap" {
 
     const payload = "Hello Onion!";
     const next_hop = [_]u8{0xAB} ** 32;
-    const shared_secret = [_]u8{0} ** 32;
+    // Generate valid KeyPair for testing
+    const kp = crypto.dh.X25519.KeyPair.generate();
+    const receiver_pubkey = kp.public_key;
+    const receiver_seckey = kp.secret_key;
 
-    var packet = try builder.wrapLayer(payload, next_hop, shared_secret);
+    const session_id = [_]u8{0xCC} ** 16;
+
+    var packet = try builder.wrapLayer(payload, next_hop, receiver_pubkey, session_id);
     defer packet.deinit(allocator);
 
-    // Verify it is "encrypted" (XOR 0xFF)
-    // Payload "H" (0x48) ^ 0xFF = 0xB7
-    // First byte of cleartext is next_hop[0] (0xAB) ^ 0xFF = 0x54
-    try std.testing.expectEqual(@as(u8, 0x54), packet.ciphertext[0]);
+    // Verify it is encrypted (not plain)
+    // First byte of cleartext should NOT be next_hop[0] (0xAB)
+    try std.testing.expect(packet.ciphertext[0] != 0xAB);
 
-    const result = try builder.unwrapLayer(packet, shared_secret);
+    // Verify first 16 bytes of nonce are session_id
+    try std.testing.expectEqualSlices(u8, &session_id, packet.nonce[0..16]);
+
+    const result = try builder.unwrapLayer(packet, receiver_seckey, session_id);
     defer allocator.free(result.payload);
 
     try std.testing.expectEqualSlices(u8, &next_hop, &result.next_hop);
