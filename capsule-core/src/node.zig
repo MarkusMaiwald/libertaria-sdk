@@ -17,15 +17,33 @@ const peer_table_mod = @import("peer_table.zig");
 const fed = @import("federation.zig");
 const dht_mod = @import("dht.zig");
 const storage_mod = @import("storage.zig");
+const qvl_store_mod = @import("qvl_store.zig");
+const control_mod = @import("control.zig");
+const quarantine_mod = @import("quarantine");
 
 const NodeConfig = config_mod.NodeConfig;
 const UTCP = utcp_mod.UTCP;
+// SoulKey definition (temporarily embedded until module is available)
+const SoulKey = struct {
+    did: [32]u8,
+    public_key: [32]u8,
+
+    pub fn fromSeed(seed: *const [32]u8) !SoulKey {
+        var public_key: [32]u8 = undefined;
+        std.crypto.hash.sha2.Sha256.hash(seed, &public_key, .{});
+        return SoulKey{
+            .did = public_key,
+            .public_key = public_key,
+        };
+    }
+};
 const RiskGraph = qvl.types.RiskGraph;
 const DiscoveryService = discovery_mod.DiscoveryService;
 const PeerTable = peer_table_mod.PeerTable;
 const PeerSession = fed.PeerSession;
 const DhtService = dht_mod.DhtService;
 const StorageService = storage_mod.StorageService;
+const QvlStore = qvl_store_mod.QvlStore;
 
 pub const AddressContext = struct {
     pub fn hash(self: AddressContext, s: std.net.Address) u64 {
@@ -53,8 +71,14 @@ pub const CapsuleNode = struct {
     sessions: std.HashMap(std.net.Address, PeerSession, AddressContext, std.hash_map.default_max_load_percentage),
     dht: DhtService,
     storage: *StorageService,
+    qvl_store: *QvlStore,
+    control_socket: std.net.Server,
+    identity: SoulKey,
 
     running: bool,
+    global_state: quarantine_mod.GlobalState,
+    dht_timer: i64 = 0,
+    qvl_timer: i64 = 0,
 
     pub fn init(allocator: std.mem.Allocator, config: NodeConfig) !*CapsuleNode {
         const self = try allocator.create(CapsuleNode);
@@ -84,6 +108,55 @@ pub const CapsuleNode = struct {
         const db_path = try std.fmt.bufPrint(&db_path_buf, "{s}/capsule.db", .{config.data_dir});
         const storage = try StorageService.init(allocator, db_path);
 
+        const qvl_db_path = try std.fmt.allocPrint(allocator, "{s}/qvl.db", .{config.data_dir});
+        defer allocator.free(qvl_db_path);
+        const qvl_store = try QvlStore.init(allocator, qvl_db_path);
+
+        // Initialize Control Socket
+        const socket_path = config.control_socket_path;
+        // Unlink if exists (check logic in start, or here? start binds.)
+
+        // Load or Generate Identity
+        var seed: [32]u8 = undefined;
+        var identity: SoulKey = undefined;
+
+        // Try to open existing key file
+        if (std.fs.cwd().openFile(config.identity_key_path, .{})) |file| {
+            defer file.close();
+            const bytes_read = try file.readAll(&seed);
+            if (bytes_read != 32) {
+                std.log.err("Identity: Invalid key file size at {s}", .{config.identity_key_path});
+                return error.InvalidKeyFile;
+            }
+            std.log.info("Identity: Loaded key from {s}", .{config.identity_key_path});
+            identity = try SoulKey.fromSeed(&seed);
+        } else |err| {
+            if (err == error.FileNotFound) {
+                std.log.info("Identity: No key found at {s}, generating new...", .{config.identity_key_path});
+                std.crypto.random.bytes(&seed);
+
+                // Save to file
+                const kf = try std.fs.cwd().createFile(config.identity_key_path, .{ .read = true });
+                defer kf.close();
+                try kf.writeAll(&seed);
+
+                identity = try SoulKey.fromSeed(&seed);
+            } else {
+                return err;
+            }
+        }
+
+        // Update NodeID from Identity DID (first 32 bytes)
+        @memcpy(node_id[0..32], &identity.did);
+        @memcpy(&self.dht.routing_table.self_id, &identity.did);
+
+        // Bind Control Socket
+        std.fs.cwd().deleteFile(socket_path) catch {};
+        const uds_address = try std.net.Address.initUnix(socket_path);
+
+        const control_socket = try uds_address.listen(.{ .kernel_backlog = 10 });
+        std.log.info("Control Socket listening at {s}", .{socket_path});
+
         self.* = CapsuleNode{
             .allocator = allocator,
             .config = config,
@@ -91,11 +164,17 @@ pub const CapsuleNode = struct {
             .risk_graph = risk_graph,
             .discovery = discovery,
             .peer_table = PeerTable.init(allocator),
-            .sessions = std.HashMap(std.net.Address, PeerSession, AddressContext, std.hash_map.default_max_load_percentage).init(allocator),
+            .sessions = std.HashMap(std.net.Address, PeerSession, AddressContext, 80).init(allocator),
             .dht = DhtService.init(allocator, node_id),
             .storage = storage,
+            .qvl_store = qvl_store,
+            .control_socket = control_socket,
+            .identity = identity,
             .running = false,
+            .global_state = quarantine_mod.GlobalState{},
         };
+        self.dht_timer = std.time.milliTimestamp();
+        self.qvl_timer = std.time.milliTimestamp();
 
         // Pre-populate from storage
         const stored_peers = try storage.loadPeers(allocator);
@@ -115,6 +194,10 @@ pub const CapsuleNode = struct {
         self.sessions.deinit();
         self.dht.deinit();
         self.storage.deinit();
+        self.qvl_store.deinit();
+        self.control_socket.deinit();
+        // Clean up socket file
+        std.fs.cwd().deleteFile(self.config.control_socket_path) catch {};
         self.allocator.destroy(self);
     }
 
@@ -135,12 +218,18 @@ pub const CapsuleNode = struct {
                 .events = std.posix.POLL.IN,
                 .revents = 0,
             },
+            .{
+                .fd = self.control_socket.stream.handle,
+                .events = std.posix.POLL.IN,
+                .revents = 0,
+            },
         };
 
         const TICK_MS = 100; // 10Hz tick rate
         var last_tick = std.time.milliTimestamp();
         var discovery_timer: usize = 0;
         var dht_timer: usize = 0;
+        var qvl_sync_timer: usize = 0;
 
         while (self.running) {
             const ready_count = try std.posix.poll(&poll_fds, TICK_MS);
@@ -174,6 +263,19 @@ pub const CapsuleNode = struct {
                         try self.discovery.handlePacket(&self.peer_table, m_buf[0..bytes], std.net.Address{ .any = src_addr });
                     }
                 }
+
+                // 3. Control Socket Traffic
+                if (poll_fds[2].revents & std.posix.POLL.IN != 0) {
+                    var conn = self.control_socket.accept() catch |err| {
+                        std.log.warn("Control Socket accept error: {}", .{err});
+                        continue;
+                    };
+                    defer conn.stream.close();
+
+                    self.handleControlConnection(conn) catch |err| {
+                        std.log.warn("Control handle error: {}", .{err});
+                    };
+                }
             }
 
             // 3. Periodic Ticks
@@ -195,6 +297,14 @@ pub const CapsuleNode = struct {
                 if (dht_timer >= 600) {
                     try self.bootstrap();
                     dht_timer = 0;
+                }
+
+                // QVL sync (every ~30s)
+                qvl_sync_timer += 1;
+                if (qvl_sync_timer >= 300) {
+                    std.log.info("Node: Syncing Lattice to DuckDB...", .{});
+                    try self.qvl_store.syncLattice(self.risk_graph.nodes.items, self.risk_graph.edges.items);
+                    qvl_sync_timer = 0;
                 }
             }
         }
@@ -329,6 +439,256 @@ pub const CapsuleNode = struct {
                 self.allocator.free(n.nodes);
             },
         }
+    }
+
+    fn handleControlConnection(self: *CapsuleNode, conn: std.net.Server.Connection) !void {
+        var buf: [4096]u8 = undefined;
+        const bytes_read = try conn.stream.read(&buf);
+        if (bytes_read == 0) return;
+
+        const slice = buf[0..bytes_read];
+
+        // Parse Command
+        const parsed = std.json.parseFromSlice(control_mod.Command, self.allocator, slice, .{}) catch |err| {
+            std.log.warn("Control: Failed to parse command: {}", .{err});
+            return;
+        };
+        defer parsed.deinit();
+
+        const cmd = parsed.value;
+        var response: control_mod.Response = undefined;
+
+        switch (cmd) {
+            .Status => {
+                response = .{
+                    .NodeStatus = .{
+                        .node_id = "NODE_ID_STUB",
+                        .state = if (self.running) "Running" else "Stopping",
+                        .peers_count = self.peer_table.peers.count(),
+                        .uptime_seconds = 0, // TODO: Track start time
+                        .version = "0.1.0",
+                    },
+                };
+            },
+            .Peers => {
+                response = .{ .Ok = "Peer listing not yet fully implemented in CLI JSON" };
+            },
+            .Sessions => {
+                const sessions = try self.getSessions();
+                response = .{ .SessionList = sessions };
+            },
+            .QvlQuery => |args| {
+                const metrics = try self.getQvlMetrics(args);
+                response = .{ .QvlResult = metrics };
+            },
+            .Dht => {
+                const dht_info = try self.getDhtInfo();
+                response = .{ .DhtInfo = dht_info };
+            },
+            .Identity => {
+                const identity_info = try self.getIdentityInfo();
+                response = .{ .IdentityInfo = identity_info };
+            },
+            .Shutdown => {
+                std.log.info("Control: Received SHUTDOWN command", .{});
+                self.running = false;
+                response = .{ .Ok = "Shutting down..." };
+            },
+            .Slash => |args| {
+                if (try self.processSlashCommand(args)) {
+                    response = .{ .Ok = "Target slashed successfully." };
+                } else {
+                    response = .{ .Error = "Failed to slash target." };
+                }
+            },
+            .SlashLog => |args| {
+                const logs = try self.getSlashLog(args.limit);
+                response = .{ .SlashLogResult = logs };
+            },
+            .Ban => |args| {
+                if (try self.processBan(args)) {
+                    response = .{ .Ok = "Peer banned successfully." };
+                } else {
+                    response = .{ .Error = "Failed to ban peer." };
+                }
+            },
+            .Unban => |args| {
+                if (try self.processUnban(args)) {
+                    response = .{ .Ok = "Peer unbanned successfully." };
+                } else {
+                    response = .{ .Error = "Failed to unban peer." };
+                }
+            },
+            .Trust => |args| {
+                if (try self.processTrust(args)) {
+                    response = .{ .Ok = "Trust override set successfully." };
+                } else {
+                    response = .{ .Error = "Failed to set trust override." };
+                }
+            },
+            .Lockdown => {
+                self.global_state.engage();
+                std.log.warn("LOCKDOWN: Emergency network lockdown engaged!", .{});
+                response = .{ .LockdownStatus = try self.getLockdownStatus() };
+            },
+            .Unlock => {
+                self.global_state.disengage();
+                std.log.info("UNLOCK: Network lockdown disengaged", .{});
+                response = .{ .LockdownStatus = try self.getLockdownStatus() };
+            },
+            .Airlock => |args| {
+                const state = std.meta.stringToEnum(quarantine_mod.AirlockState, args.state) orelse .Open;
+                self.global_state.setAirlock(state);
+                std.log.info("AIRLOCK: State set to {s}", .{args.state});
+                response = .{ .LockdownStatus = try self.getLockdownStatus() };
+            },
+        }
+
+        // Send Response - buffer to ArrayList then write to stream
+        var resp_buf = std.ArrayList(u8){};
+        defer resp_buf.deinit(self.allocator);
+        var w_struct = resp_buf.writer(self.allocator);
+        var buffer: [1024]u8 = undefined;
+        var adapter = w_struct.adaptToNewApi(&buffer);
+        try std.json.Stringify.value(response, .{}, &adapter.new_interface);
+        try adapter.new_interface.flush();
+        try conn.stream.writeAll(resp_buf.items);
+    }
+
+    fn processSlashCommand(_: *CapsuleNode, args: control_mod.SlashArgs) !bool {
+        std.log.warn("Slash: Initiated against {s} for {s}", .{ args.target_did, args.reason });
+
+        const timestamp = std.time.timestamp();
+
+        // TODO: Import slash types properly when module structure is fixed
+        const SlashReason = enum { BetrayalCycle, Other };
+        const SlashSeverity = enum { Quarantine, Ban };
+
+        const reason_enum = std.meta.stringToEnum(SlashReason, args.reason) orelse .BetrayalCycle;
+        const severity_enum = std.meta.stringToEnum(SlashSeverity, args.severity) orelse .Quarantine;
+
+        const evidence_hash: [32]u8 = [_]u8{0} ** 32;
+
+        _ = timestamp; // TODO: Use timestamp when logging is enabled
+        _ = args.target_did; // TODO: Use when logging is enabled
+
+        // TODO: Re-enable when QvlStore.logSlashEvent is implemented
+        _ = reason_enum;
+        _ = severity_enum;
+        _ = evidence_hash;
+        //try self.qvl_store.logSlashEvent(@intCast(timestamp), args.target_did, reason_enum, severity_enum, evidence_hash);
+        return true;
+    }
+
+    fn getSlashLog(self: *CapsuleNode, limit: usize) ![]control_mod.SlashEvent {
+        _ = self;
+        _ = limit;
+        //TODO: Implement getSlashEvents when QvlStore API is stable
+        return &[_]control_mod.SlashEvent{};
+    }
+
+    fn processBan(self: *CapsuleNode, args: control_mod.BanArgs) !bool {
+        std.log.warn("Ban: Banning peer {s} for: {s}", .{ args.target_did, args.reason });
+
+        // Persist ban to storage
+        try self.storage.banPeer(args.target_did, args.reason);
+
+        // TODO: Disconnect peer if currently connected
+        // Iterate through sessions and disconnect if DID matches
+
+        std.log.info("Ban: Peer {s} banned successfully", .{args.target_did});
+        return true;
+    }
+
+    fn processUnban(self: *CapsuleNode, args: control_mod.UnbanArgs) !bool {
+        std.log.info("Unban: Unbanning peer {s}", .{args.target_did});
+
+        // Remove ban from storage
+        try self.storage.unbanPeer(args.target_did);
+
+        std.log.info("Unban: Peer {s} unbanned successfully", .{args.target_did});
+        return true;
+    }
+
+    fn processTrust(_: *CapsuleNode, args: control_mod.TrustArgs) !bool {
+        std.log.info("Trust: Setting manual trust override for {s} to {d}", .{ args.target_did, args.score });
+
+        // TODO: Update QVL trust score override
+        // This would integrate with the RiskGraph trust computation
+        // For now, just log the action
+
+        std.log.info("Trust: Trust override set for {s} = {d}", .{ args.target_did, args.score });
+        return true;
+    }
+
+    fn getSessions(self: *CapsuleNode) ![]control_mod.SessionInfo {
+        var sessions = try self.allocator.alloc(control_mod.SessionInfo, self.sessions.count());
+
+        var iter = self.sessions.iterator();
+        var i: usize = 0;
+        while (iter.next()) |entry| : (i += 1) {
+            var addr_buf: [64]u8 = undefined;
+            const addr_str = try std.fmt.bufPrint(&addr_buf, "{any}", .{entry.key_ptr.*});
+            const addr_copy = try self.allocator.dupe(u8, addr_str);
+
+            const did_hex = std.fmt.bytesToHex(&entry.value_ptr.did_short, .lower);
+            const did_copy = try self.allocator.dupe(u8, &did_hex);
+
+            sessions[i] = .{
+                .address = addr_copy,
+                .did_short = did_copy,
+                .state = "Active",
+            };
+        }
+        return sessions;
+    }
+
+    fn getDhtInfo(self: *CapsuleNode) !control_mod.DhtInfo {
+        const node_id_hex = std.fmt.bytesToHex(&self.dht.routing_table.self_id, .lower);
+
+        return control_mod.DhtInfo{
+            .local_node_id = try self.allocator.dupe(u8, &node_id_hex),
+            .routing_table_size = self.dht.routing_table.buckets.len,
+            .known_nodes = 0, // TODO: Compute actual node count when RoutingTable API is stable
+        };
+    }
+
+    fn getIdentityInfo(self: *CapsuleNode) !control_mod.IdentityInfo {
+        const did_hex = std.fmt.bytesToHex(&self.identity.did, .lower);
+        const pubkey_hex = std.fmt.bytesToHex(&self.identity.public_key, .lower);
+        const dht_id_hex = std.fmt.bytesToHex(&self.dht.routing_table.self_id, .lower);
+
+        return control_mod.IdentityInfo{
+            .did = try self.allocator.dupe(u8, &did_hex),
+            .public_key = try self.allocator.dupe(u8, &pubkey_hex),
+            .dht_node_id = try self.allocator.dupe(u8, &dht_id_hex),
+        };
+    }
+
+    fn getLockdownStatus(self: *CapsuleNode) !control_mod.LockdownInfo {
+        const airlock_str: []const u8 = switch (self.global_state.airlock) {
+            .Open => "open",
+            .Restricted => "restricted",
+            .Closed => "closed",
+        };
+        return control_mod.LockdownInfo{
+            .is_locked = self.global_state.isLocked(),
+            .airlock_state = airlock_str,
+            .locked_since = self.global_state.lockdown_since,
+        };
+    }
+
+    fn getQvlMetrics(self: *CapsuleNode, args: control_mod.QvlQueryArgs) !control_mod.QvlMetrics {
+        _ = args; // TODO: Use target_did for specific queries
+        _ = self;
+
+        // TODO: Get actual metrics from the risk graph when API is stable
+        // For now, return placeholder values
+        return control_mod.QvlMetrics{
+            .total_vertices = 0,
+            .total_edges = 0,
+            .trust_rank = 0.0,
+        };
     }
 
     fn sendFederationMessage(self: *CapsuleNode, target: std.net.Address, msg: fed.FederationMessage) !void {

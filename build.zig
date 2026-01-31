@@ -451,6 +451,8 @@ pub fn build(b: *std.Build) void {
     capsule_exe.linkLibC();
     // Link SQLite3 (required for Persistent State)
     capsule_exe.linkSystemLibrary("sqlite3");
+    // Link DuckDB (required for Analytical QVL)
+    capsule_exe.linkSystemLibrary("duckdb");
 
     b.installArtifact(capsule_exe);
 

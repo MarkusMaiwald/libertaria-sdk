@@ -11,6 +11,45 @@ pub const QuarantineStatus = enum {
     Honeypot, // Accept traffic, log analysis, send fake OKs?
 };
 
+/// Airlock state for graduated network control
+pub const AirlockState = enum {
+    Open, // Normal operation - all traffic allowed
+    Restricted, // Only trusted DIDs allowed
+    Closed, // Emergency lockdown - drop ALL traffic
+};
+
+/// Global network state (atomic for thread-safety)
+pub const GlobalState = struct {
+    lockdown: std.atomic.Value(bool) = std.atomic.Value(bool).init(false),
+    airlock: AirlockState = .Open,
+    lockdown_since: i64 = 0,
+
+    pub fn engage(self: *GlobalState) void {
+        self.lockdown.store(true, .release);
+        self.lockdown_since = std.time.timestamp();
+        self.airlock = .Closed;
+    }
+
+    pub fn disengage(self: *GlobalState) void {
+        self.lockdown.store(false, .release);
+        self.airlock = .Open;
+    }
+
+    pub fn isLocked(self: *const GlobalState) bool {
+        return self.lockdown.load(.acquire);
+    }
+
+    pub fn setAirlock(self: *GlobalState, state: AirlockState) void {
+        self.airlock = state;
+        if (state == .Closed) {
+            self.lockdown.store(true, .release);
+            self.lockdown_since = std.time.timestamp();
+        } else if (state == .Open) {
+            self.lockdown.store(false, .release);
+        }
+    }
+};
+
 pub const QuarantineEntry = struct {
     until_ts: i64,
     mode: QuarantineStatus,

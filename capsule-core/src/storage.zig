@@ -68,6 +68,11 @@ pub const StorageService = struct {
             \\     weight REAL,
             \\     PRIMARY KEY(source, target)
             \\ );
+            \\ CREATE TABLE IF NOT EXISTS banned_peers (
+            \\     did TEXT PRIMARY KEY,
+            \\     reason TEXT NOT NULL,
+            \\     banned_at INTEGER NOT NULL
+            \\ );
         ;
 
         var err_msg: [*c]u8 = null;
@@ -130,5 +135,51 @@ pub const StorageService = struct {
         const out = try allocator.alloc(RemoteNode, list.items.len);
         @memcpy(out, list.items);
         return out;
+    }
+
+    /// Ban a peer by DID
+    pub fn banPeer(self: *StorageService, did: []const u8, reason: []const u8) !void {
+        const now = std.time.timestamp();
+        const sql = "INSERT OR REPLACE INTO banned_peers (did, reason, banned_at) VALUES (?, ?, ?)";
+
+        var stmt: ?*c.sqlite3_stmt = null;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
+        defer _ = c.sqlite3_finalize(stmt);
+
+        _ = c.sqlite3_bind_text(stmt, 1, did.ptr, @intCast(did.len), null);
+        _ = c.sqlite3_bind_text(stmt, 2, reason.ptr, @intCast(reason.len), null);
+        _ = c.sqlite3_bind_int64(stmt, 3, now);
+
+        if (c.sqlite3_step(stmt) != c.SQLITE_DONE) return error.StepFailed;
+    }
+
+    /// Unban a peer by DID
+    pub fn unbanPeer(self: *StorageService, did: []const u8) !void {
+        const sql = "DELETE FROM banned_peers WHERE did = ?";
+
+        var stmt: ?*c.sqlite3_stmt = null;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
+        defer _ = c.sqlite3_finalize(stmt);
+
+        _ = c.sqlite3_bind_text(stmt, 1, did.ptr, @intCast(did.len), null);
+
+        if (c.sqlite3_step(stmt) != c.SQLITE_DONE) return error.StepFailed;
+    }
+
+    /// Check if a peer is banned
+    pub fn isBanned(self: *StorageService, did: []const u8) !bool {
+        const sql = "SELECT COUNT(*) FROM banned_peers WHERE did = ?";
+
+        var stmt: ?*c.sqlite3_stmt = null;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
+        defer _ = c.sqlite3_finalize(stmt);
+
+        _ = c.sqlite3_bind_text(stmt, 1, did.ptr, @intCast(did.len), null);
+
+        if (c.sqlite3_step(stmt) == c.SQLITE_ROW) {
+            const count = c.sqlite3_column_int64(stmt, 0);
+            return count > 0;
+        }
+        return false;
     }
 };

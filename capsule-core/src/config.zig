@@ -9,6 +9,12 @@ pub const NodeConfig = struct {
     /// UTCP bind port (default: 8710)
     port: u16 = 8710,
 
+    /// Control Socket Path (Unix Domain Socket)
+    control_socket_path: []const u8,
+
+    /// Identity Key Path (Ed25519 private key)
+    identity_key_path: []const u8,
+
     /// Bootstrap peers (multiaddrs)
     bootstrap_peers: [][]const u8 = &.{},
 
@@ -18,6 +24,8 @@ pub const NodeConfig = struct {
     /// Free allocated memory (strings, slices)
     pub fn deinit(self: *NodeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.data_dir);
+        allocator.free(self.control_socket_path);
+        allocator.free(self.identity_key_path);
         for (self.bootstrap_peers) |peer| {
             allocator.free(peer);
         }
@@ -28,6 +36,8 @@ pub const NodeConfig = struct {
         // Default data dir: ~/.libertaria (or "data" for MVP)
         return NodeConfig{
             .data_dir = try allocator.dupe(u8, "data"),
+            .control_socket_path = try allocator.dupe(u8, "data/capsule.sock"),
+            .identity_key_path = try allocator.dupe(u8, "data/identity.key"),
             .port = 8710,
         };
     }
@@ -64,6 +74,15 @@ pub const NodeConfig = struct {
 
         const cfg = parsed.value;
         const data_dir = try allocator.dupe(u8, cfg.data_dir);
+        const control_socket_path = if (cfg.control_socket_path.len > 0)
+            try allocator.dupe(u8, cfg.control_socket_path)
+        else
+            try std.fmt.allocPrint(allocator, "{s}/capsule.sock", .{data_dir});
+
+        const identity_key_path = if (cfg.identity_key_path.len > 0)
+            try allocator.dupe(u8, cfg.identity_key_path)
+        else
+            try std.fmt.allocPrint(allocator, "{s}/identity.key", .{data_dir});
 
         var peers = std.array_list.Managed([]const u8).init(allocator);
         for (cfg.bootstrap_peers) |peer| {
@@ -72,6 +91,8 @@ pub const NodeConfig = struct {
 
         return NodeConfig{
             .data_dir = data_dir,
+            .control_socket_path = control_socket_path,
+            .identity_key_path = identity_key_path,
             .port = cfg.port,
             .bootstrap_peers = try peers.toOwnedSlice(),
             .log_level = cfg.log_level,
