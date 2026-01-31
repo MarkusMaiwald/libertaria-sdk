@@ -13,6 +13,7 @@ const qvl = @import("qvl.zig");
 const pop_mod = @import("proof_of_path.zig");
 const trust_graph = @import("trust_graph.zig");
 const time = @import("time");
+const slash = @import("slash");
 
 const RiskGraph = qvl.types.RiskGraph;
 const RiskEdge = qvl.types.RiskEdge;
@@ -258,6 +259,38 @@ export fn qvl_revoke_trust_edge(
     }
 
     return -2; // Not found
+}
+
+/// Issue a SlashSignal for a detected betrayal
+/// Returns 0 on success, < 0 on error
+/// If 'out_signal' is non-null, writes serialized signal (82 bytes)
+export fn qvl_issue_slash_signal(
+    ctx: ?*QvlContext,
+    target_did: [*c]const u8,
+    reason: u8,
+    out_signal: [*c]u8,
+) callconv(.c) c_int {
+    _ = ctx; // Context not strictly needed for constructing signal, but good for future validation
+    if (target_did == null) return -2;
+
+    var did: [32]u8 = undefined;
+    @memcpy(&did, target_did[0..32]);
+
+    const signal = slash.SlashSignal{
+        .target_did = did,
+        .reason = @enumFromInt(reason),
+        .punishment = .Quarantine, // Default to Quarantine
+        .evidence_hash = [_]u8{0} ** 32, // TODO: Hash actual evidence
+        .timestamp = std.time.timestamp(),
+        .nonce = 0,
+    };
+
+    if (out_signal != null) {
+        const bytes = signal.serializeForSigning();
+        @memcpy(out_signal[0..82], &bytes);
+    }
+
+    return 0;
 }
 
 // ============================================================================

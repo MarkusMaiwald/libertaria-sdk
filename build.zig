@@ -303,6 +303,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     l1_qvl_ffi_mod.addImport("qvl", l1_qvl_mod);
+    l1_qvl_ffi_mod.addImport("slash", l1_slash_mod);
     l1_qvl_ffi_mod.addImport("time", time_mod);
 
     // QVL FFI static library (for Rust L2 Membrane Agent)

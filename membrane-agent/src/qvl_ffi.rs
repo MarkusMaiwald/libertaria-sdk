@@ -83,6 +83,13 @@ extern "C" {
         from: u32,
         to: u32,
     ) -> c_int;
+
+    fn qvl_issue_slash_signal(
+        ctx: *mut QvlContext,
+        target_did: *const u8,
+        reason: u8,
+        out_signal: *mut u8,
+    ) -> c_int;
 }
 
 // ============================================================================
@@ -261,6 +268,29 @@ impl QvlClient {
             Err(QvlError::MutationFailed)
         }
     }
+
+    /// Issue a SlashSignal (returns 82-byte serialized signal for signing/broadcast)
+    pub fn issue_slash_signal(&self, target_did: &[u8; 32], reason: u8) -> Result<[u8; 82], QvlError> {
+        if self.ctx.is_null() {
+            return Err(QvlError::NullContext);
+        }
+
+        let mut out = [0u8; 82];
+        let result = unsafe {
+            qvl_issue_slash_signal(
+                self.ctx,
+                target_did.as_ptr(),
+                reason,
+                out.as_mut_ptr(),
+            )
+        };
+
+        if result == 0 {
+            Ok(out)
+        } else {
+            Err(QvlError::MutationFailed)
+        }
+    }
 }
 
 impl Drop for QvlClient {
@@ -320,5 +350,20 @@ mod tests {
         // No betrayal in empty graph
         assert_eq!(anomaly.score, 0.0);
         assert_eq!(anomaly.reason, AnomalyReason::None);
+    }
+
+    #[test]
+    fn test_issue_slash_signal() {
+        let client = QvlClient::new().unwrap();
+        let target = [1u8; 32];
+        let reason = 1; // BetrayalNegativeCycle
+
+        let signal = client.issue_slash_signal(&target, reason).unwrap();
+        // Verify first byte (target DID[0] = 1)
+        assert_eq!(signal[0], 1);
+        // Verify reason (offset 32 = 1)
+        assert_eq!(signal[32], 1);
+        // Verify punishment (offset 33 = 1 Quarantine)
+        assert_eq!(signal[33], 1);
     }
 }
