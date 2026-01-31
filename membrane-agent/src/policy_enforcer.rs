@@ -87,9 +87,20 @@ impl PolicyEnforcer {
             Ok(anomaly) if anomaly.score > 0.9 => { 
                 // High confidence betrayal
                 if let Some(did) = self.qvl.get_did(anomaly.node) {
-                     // Issue slash (mapping AnomalyReason to SlashReason)
-                     // Note: AnomalyReason::NegativeCycle(1) maps to SlashReason::BetrayalCycle(1)
-                     if let Ok(signal) = self.qvl.issue_slash_signal(&did, anomaly.reason as u8) {
+                     // 1. Get Evidence
+                     let evidence_hash = if let Ok(evidence) = self.qvl.get_betrayal_evidence(anomaly.node) {
+                         // TODO: Calculate real Blake3 hash of evidence. For now use first 32 bytes or dummy.
+                         let mut hash = [0xEEu8; 32];
+                         if evidence.len() >= 32 {
+                             hash.copy_from_slice(&evidence[0..32]);
+                         }
+                         hash
+                     } else {
+                         [0u8; 32] 
+                     };
+
+                     // 2. Issue slash
+                     if let Ok(signal) = self.qvl.issue_slash_signal(&did, anomaly.reason as u8, &evidence_hash) {
                          return Some(signal);
                      }
                 }

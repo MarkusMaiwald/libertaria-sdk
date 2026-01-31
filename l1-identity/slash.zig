@@ -14,8 +14,8 @@ pub const SlashReason = enum(u8) {
     InvalidProof = 0x06, // Tampered PoP
 };
 
-/// RFC-0121: Severity Levels
-pub const SlashSeverity = enum(u2) {
+/// RFC-0121: Severity Levels (u8 for extern compatibility)
+pub const SlashSeverity = enum(u8) {
     Warn = 0, // Log only; no enforcement
     Quarantine = 1, // Honeypot mode
     Slash = 2, // Rate limit + reputation hit
@@ -23,27 +23,33 @@ pub const SlashSeverity = enum(u2) {
 };
 
 /// RFC-0121: The Slash Signal Payload (82 bytes)
-pub const SlashSignal = packed struct {
+/// Extern struct for C-compatible layout (no bit-packing)
+pub const SlashSignal = extern struct {
     // Target identification (32 bytes)
     target_did: [32]u8,
 
     // Evidence (41 bytes)
-    reason: SlashReason,
-    evidence_hash: [32]u8,
-    timestamp: u64, // SovereignTimestamp
+    reason: SlashReason, // 1 byte
+    evidence_hash: [32]u8, // 32 bytes
+    timestamp: u64, // 8 bytes
 
     // Enforcement parameters (9 bytes)
-    severity: SlashSeverity,
-    duration_seconds: u32, // 0 = permanent
-    entropy_stamp: u32,
+    severity: SlashSeverity, // 1 byte
+    duration_seconds: u32, // 4 bytes
+    entropy_stamp: u32, // 4 bytes
 
     pub fn serializeForSigning(self: SlashSignal) [82]u8 {
         var buf: [82]u8 = undefined;
-        // Packed struct is already binary layout, but endianness matters.
-        // For simplicity in Phase 7, we rely on packed struct memory layout.
-        // In prod, perform explicit endian-safe serialization.
-        const bytes = std.mem.asBytes(&self);
-        @memcpy(&buf, bytes);
+        var fbs = std.io.fixedBufferStream(&buf);
+        const writer = fbs.writer();
+        // Ignore errors (buffer is exact size)
+        writer.writeAll(&self.target_did) catch {};
+        writer.writeInt(u8, @intFromEnum(self.reason), .little) catch {};
+        writer.writeAll(&self.evidence_hash) catch {};
+        writer.writeInt(u64, self.timestamp, .little) catch {};
+        writer.writeInt(u8, @intFromEnum(self.severity), .little) catch {};
+        writer.writeInt(u32, self.duration_seconds, .little) catch {};
+        writer.writeInt(u32, self.entropy_stamp, .little) catch {};
         return buf;
     }
 };

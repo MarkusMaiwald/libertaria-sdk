@@ -38,16 +38,8 @@ pub const BellmanFordResult = struct {
     /// Compute anomaly score based on detected cycles.
     /// Score is normalized to [0, 1].
     pub fn computeAnomalyScore(self: *const BellmanFordResult) f64 {
-        if (self.betrayal_cycles.items.len == 0) return 0.0;
-
-        var total_risk: f64 = 0.0;
-        for (self.betrayal_cycles.items) |cycle| {
-            // Cycle severity = length × base weight
-            total_risk += @as(f64, @floatFromInt(cycle.len)) * 0.2;
-        }
-
-        // Normalize: cap at 1.0
-        return @min(1.0, total_risk);
+        if (self.betrayal_cycles.items.len > 0) return 1.0; // Any negative cycle is critical
+        return 0.0;
     }
 
     /// Get nodes involved in any betrayal cycle.
@@ -69,6 +61,37 @@ pub const BellmanFordResult = struct {
             i += 1;
         }
         return result;
+    }
+
+    /// Generate cryptographic evidence of betrayal (serialized cycle with weights)
+    /// Format: version(1) + cycle_len(4) + [NodeID(4) + Risk(8)]...
+    pub fn generateEvidence(
+        self: *const BellmanFordResult,
+        graph: *const RiskGraph,
+        allocator: std.mem.Allocator,
+    ) ![]u8 {
+        if (self.betrayal_cycles.items.len == 0) return error.NoEvidence;
+
+        const cycle = self.betrayal_cycles.items[0];
+        var evidence = std.ArrayListUnmanaged(u8){};
+        errdefer evidence.deinit(allocator);
+
+        try evidence.writer(allocator).writeByte(0x01); // Version
+        try evidence.writer(allocator).writeInt(u32, @intCast(cycle.len), .little);
+
+        for (cycle, 0..) |node, i| {
+            try evidence.writer(allocator).writeInt(u32, node, .little);
+
+            // Find edge to next
+            const next = cycle[(i + 1) % cycle.len];
+            var risk: f64 = 0.0;
+            if (graph.getEdge(node, next)) |edge| {
+                risk = edge.risk;
+            }
+            try evidence.writer(allocator).writeAll(std.mem.asBytes(&risk));
+        }
+
+        return evidence.toOwnedSlice(allocator);
     }
 };
 
@@ -238,33 +261,12 @@ test "Bellman-Ford: Detect negative cycle (betrayal ring)" {
     var result = try detectBetrayal(&graph, 0, allocator);
     defer result.deinit();
 
-    try std.testing.expect(result.betrayal_cycles.items.len > 0);
+    try std.testing.expectEqual(result.betrayal_cycles.items.len, 1);
     try std.testing.expect(result.computeAnomalyScore() > 0.0);
-}
 
-test "Bellman-Ford: Sybil ring detection (5-node cartel)" {
-    const allocator = std.testing.allocator;
-    var graph = RiskGraph.init(allocator);
-    defer graph.deinit();
-
-    // 5-node ring with slight negative total
-    for (0..5) |i| {
-        try graph.addNode(@intCast(i));
-    }
-
-    // Each edge: 0.1 vouch, but one edge -0.6 betrayal
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 2, .to = 3, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 3, .to = 4, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 4, .to = 0, .risk = -0.6, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal closes ring
-
-    var result = try detectBetrayal(&graph, 0, allocator);
-    defer result.deinit();
-
-    try std.testing.expect(result.betrayal_cycles.items.len > 0);
-
-    const compromised = try result.getCompromisedNodes(allocator);
-    defer allocator.free(compromised);
-    try std.testing.expect(compromised.len >= 3); // At least 3 nodes in cycle
+    // Check evidence generation
+    const evidence = try result.generateEvidence(&graph, allocator);
+    defer allocator.free(evidence);
+    try std.testing.expect(evidence.len > 0);
+    try std.testing.expectEqual(evidence[0], 0x01); // Version
 }

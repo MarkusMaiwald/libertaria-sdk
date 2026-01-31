@@ -1,3 +1,7 @@
+# Rust
+target/
+**/*.rs.bk
+
 # Zig
 zig-out/
 .zig-cache/
@@ -5,12 +9,14 @@ zig-out/
 # Binaries & Executables
 test_zig_sha3
 test_zig_shake
+test_zig_*
 *.exe
 *.dll
 *.so
 *.dylib
 *.a
 *.lib
+libqvl_ffi.a
 
 # Operational Reports & Stories
 REPORTS/

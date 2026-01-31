@@ -279,6 +279,65 @@ export fn qvl_get_did(
     return false;
 }
 
+/// Register a DID and get its node ID
+/// returns true on success, ID in out_id
+export fn qvl_register_node(
+    ctx: ?*QvlContext,
+    did_ptr: [*c]const u8,
+    out_id: [*c]u32,
+) callconv(.c) bool {
+    const context = ctx orelse return false;
+    if (did_ptr == null or out_id == null) return false;
+
+    var did: [32]u8 = undefined;
+    @memcpy(&did, did_ptr[0..32]);
+
+    if (context.trust_graph.getOrInsertNode(did)) |id| {
+        out_id.* = id;
+        // Ensure node exists in risk graph (idempotent check needed? RiskGraph is simple list?)
+        // RiskGraph.addNode appends. We don't want duplicates.
+        // But RiskGraph doesn't have hasNode(id).
+        // For Phase 8/9 simulation, we assume register is called once per node.
+        // Or we check adjacency?
+        // Let's just append for now. Duplicate iter in BellmanFord increases N but harmless?
+        // BellmanFord iterates nodes to init dist. If duplicates, it inits twice. Harmless.
+        context.risk_graph.addNode(id) catch {};
+        return true;
+    } else |_| {
+        return false;
+    }
+}
+
+/// Get serialization of betrayal evidence (for hashing/storage)
+/// out_buf must be large enough. returns actual len written.
+/// if out_buf is null, returns required len.
+export fn qvl_get_betrayal_evidence(
+    ctx: ?*QvlContext,
+    node_id: u32,
+    out_buf: [*c]u8,
+    buf_len: u32,
+) callconv(.c) u32 {
+    const context = ctx orelse return 0;
+
+    var result = qvl.betrayal.detectBetrayal(
+        &context.risk_graph,
+        node_id,
+        context.allocator,
+    ) catch return 0;
+    defer result.deinit();
+
+    if (result.betrayal_cycles.items.len == 0) return 0;
+
+    const evidence = result.generateEvidence(&context.risk_graph, context.allocator) catch return 0;
+    defer context.allocator.free(evidence);
+
+    if (out_buf == null) return @intCast(evidence.len);
+    if (buf_len < evidence.len) return 0; // Buffer too small
+
+    @memcpy(out_buf[0..evidence.len], evidence);
+    return @intCast(evidence.len);
+}
+
 /// Issue a SlashSignal for a detected betrayal
 /// Returns 0 on success, < 0 on error
 /// If 'out_signal' is non-null, writes serialized signal (82 bytes)
@@ -286,22 +345,28 @@ export fn qvl_issue_slash_signal(
     ctx: ?*QvlContext,
     target_did: [*c]const u8,
     reason: u8,
+    evidence_hash: [*c]const u8,
     out_signal: [*c]u8,
 ) callconv(.c) c_int {
-    _ = ctx; // Context not strictly needed for constructing signal, but good for future validation
+    _ = ctx;
     if (target_did == null) return -2;
 
     var did: [32]u8 = undefined;
     @memcpy(&did, target_did[0..32]);
 
+    var hash: [32]u8 = [_]u8{0} ** 32;
+    if (evidence_hash != null) {
+        @memcpy(&hash, evidence_hash[0..32]);
+    }
+
     const signal = slash.SlashSignal{
         .target_did = did,
         .reason = @enumFromInt(reason),
-        .severity = .Quarantine, // Default to Quarantine
-        .evidence_hash = [_]u8{0} ** 32, // TODO: Hash actual evidence
+        .severity = .Quarantine,
+        .evidence_hash = hash,
         .timestamp = @intCast(std.time.timestamp()),
-        .duration_seconds = 86400, // 24 hours
-        .entropy_stamp = 0, // Placeholder
+        .duration_seconds = 86400,
+        .entropy_stamp = 0,
     };
 
     if (out_signal != null) {

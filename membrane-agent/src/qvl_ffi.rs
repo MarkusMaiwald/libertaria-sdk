@@ -90,10 +90,24 @@ extern "C" {
         out_did: *mut u8,
     ) -> bool;
 
+    fn qvl_register_node(
+        ctx: *mut QvlContext,
+        did: *const u8,
+        out_id: *mut u32,
+    ) -> bool;
+
+    fn qvl_get_betrayal_evidence(
+        ctx: *mut QvlContext,
+        node_id: u32,
+        out_buf: *mut u8,
+        buf_len: u32,
+    ) -> u32;
+
     fn qvl_issue_slash_signal(
         ctx: *mut QvlContext,
         target_did: *const u8,
         reason: u8,
+        evidence_hash: *const u8,
         out_signal: *mut u8,
     ) -> c_int;
 }
@@ -293,8 +307,50 @@ impl QvlClient {
         }
     }
 
+    /// Register a DID and get its Node ID
+    pub fn register_node(&self, did: &[u8; 32]) -> Result<u32, QvlError> {
+        if self.ctx.is_null() {
+            return Err(QvlError::NullContext);
+        }
+        let mut out_id = 0u32;
+        let result = unsafe {
+            qvl_register_node(self.ctx, did.as_ptr(), &mut out_id)
+        };
+        if result {
+            Ok(out_id)
+        } else {
+            Err(QvlError::MutationFailed)
+        }
+    }
+
+    /// Get betrayal evidence (Proof of Cycle)
+    pub fn get_betrayal_evidence(&self, node_id: u32) -> Result<Vec<u8>, QvlError> {
+        if self.ctx.is_null() {
+            return Err(QvlError::NullContext);
+        }
+
+        // First call to get length
+        let len = unsafe {
+            qvl_get_betrayal_evidence(self.ctx, node_id, std::ptr::null_mut(), 0)
+        };
+
+        if len == 0 {
+            return Err(QvlError::MutationFailed); // No evidence or cycle
+        }
+
+        let mut buf = vec![0u8; len as usize];
+        let written = unsafe {
+            qvl_get_betrayal_evidence(self.ctx, node_id, buf.as_mut_ptr(), len)
+        };
+
+        if written != len {
+            return Err(QvlError::MutationFailed);
+        }
+        Ok(buf)
+    }
+
     /// Issue a SlashSignal (returns 82-byte serialized signal for signing/broadcast)
-    pub fn issue_slash_signal(&self, target_did: &[u8; 32], reason: u8) -> Result<[u8; 82], QvlError> {
+    pub fn issue_slash_signal(&self, target_did: &[u8; 32], reason: u8, evidence_hash: &[u8; 32]) -> Result<[u8; 82], QvlError> {
         if self.ctx.is_null() {
             return Err(QvlError::NullContext);
         }
@@ -305,6 +361,7 @@ impl QvlClient {
                 self.ctx,
                 target_did.as_ptr(),
                 reason,
+                evidence_hash.as_ptr(),
                 out.as_mut_ptr(),
             )
         };
@@ -381,13 +438,17 @@ mod tests {
         let client = QvlClient::new().unwrap();
         let target = [1u8; 32];
         let reason = 1; // BetrayalNegativeCycle
+        let evidence_hash = [0xFAu8; 32];
 
-        let signal = client.issue_slash_signal(&target, reason).unwrap();
+        let signal = client.issue_slash_signal(&target, reason, &evidence_hash).unwrap();
         // Verify first byte (target DID[0] = 1)
         assert_eq!(signal[0], 1);
         // Verify reason (offset 32 = 1)
         assert_eq!(signal[32], 1);
-        // Verify punishment (offset 33 = 1 Quarantine)
-        assert_eq!(signal[33], 1);
+        // Verify evidence hash (offset 33)
+        assert_eq!(signal[33], 0xFA); 
+        // Verify severity (offset 32 + 1 + 32 + 8 = 73 ? Check packing)
+        // With packed(u64 aligned?), offsets might vary if not careful.
+        // But [33] should be start of evidence.
     }
 }

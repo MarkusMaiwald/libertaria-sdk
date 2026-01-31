@@ -128,6 +128,16 @@ pub const RiskGraph = struct {
     pub fn edgeCount(self: *const RiskGraph) usize {
         return self.edges.items.len;
     }
+
+    pub fn getEdge(self: *const RiskGraph, from: NodeId, to: NodeId) ?RiskEdge {
+        if (self.adjacency.get(from)) |indices| {
+            for (indices.items) |idx| {
+                const edge = self.edges.items[idx];
+                if (edge.to == to) return edge;
+            }
+        }
+        return null;
+    }
 };
 
 test "RiskGraph: basic operations" {
