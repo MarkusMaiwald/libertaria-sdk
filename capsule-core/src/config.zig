@@ -24,6 +24,15 @@ pub const NodeConfig = struct {
     /// Enable Gateway Service (Layer 1 Coordination)
     gateway_enabled: bool = false,
 
+    /// Enable Relay Service (Layer 2 Forwarding)
+    relay_enabled: bool = false,
+
+    /// Enable Bridge Service (Layer 3 Protocol Translation)
+    bridge_enabled: bool = false,
+
+    /// QVL minimum trust score for relay selection
+    relay_trust_threshold: f64 = 0.5,
+
     /// Free allocated memory (strings, slices)
     pub fn deinit(self: *NodeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.data_dir);
@@ -43,6 +52,9 @@ pub const NodeConfig = struct {
             .identity_key_path = try allocator.dupe(u8, "data/identity.key"),
             .port = 8710,
             .gateway_enabled = false,
+            .relay_enabled = false,
+            .bridge_enabled = false,
+            .relay_trust_threshold = 0.5,
         };
     }
 

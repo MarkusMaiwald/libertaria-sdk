@@ -22,6 +22,7 @@ const qvl_store_mod = @import("qvl_store.zig");
 const control_mod = @import("control.zig");
 const quarantine_mod = @import("quarantine");
 const circuit_mod = @import("circuit.zig");
+const relay_service_mod = @import("relay_service.zig");
 
 const NodeConfig = config_mod.NodeConfig;
 const UTCP = utcp_mod.UTCP;
@@ -73,6 +74,8 @@ pub const CapsuleNode = struct {
     sessions: std.HashMap(std.net.Address, PeerSession, AddressContext, std.hash_map.default_max_load_percentage),
     dht: DhtService,
     gateway: ?gateway_mod.Gateway,
+    relay_service: ?relay_service_mod.RelayService,
+    circuit_builder: ?circuit_mod.CircuitBuilder,
     storage: *StorageService,
     qvl_store: *QvlStore,
     control_socket: std.net.Server,
@@ -178,6 +181,8 @@ pub const CapsuleNode = struct {
             .sessions = std.HashMap(std.net.Address, PeerSession, AddressContext, 80).init(allocator),
             .dht = undefined, // Initialized below
             .gateway = null, // Initialized below
+            .relay_service = null, // Initialized below
+            .circuit_builder = null, // Initialized below
             .storage = storage,
             .qvl_store = qvl_store,
             .control_socket = control_socket,
@@ -193,6 +198,23 @@ pub const CapsuleNode = struct {
             self.gateway = gateway_mod.Gateway.init(allocator, &self.dht);
             std.log.info("Gateway Service: ENABLED", .{});
         }
+
+        // Initialize Relay Service
+        if (config.relay_enabled) {
+            self.relay_service = relay_service_mod.RelayService.init(allocator);
+            std.log.info("Relay Service: ENABLED", .{});
+        }
+
+        // Initialize Circuit Builder
+        if (config.relay_enabled) {
+            self.circuit_builder = circuit_mod.CircuitBuilder.init(
+                allocator,
+                qvl_store,
+                &self.peer_table,
+            );
+            std.log.info("Circuit Builder: ENABLED (trust threshold: {d})", .{config.relay_trust_threshold});
+        }
+
         self.dht_timer = std.time.milliTimestamp();
         self.qvl_timer = std.time.milliTimestamp();
 
@@ -213,6 +235,8 @@ pub const CapsuleNode = struct {
         self.peer_table.deinit();
         self.sessions.deinit();
         if (self.gateway) |*gw| gw.deinit();
+        if (self.relay_service) |*rs| rs.deinit();
+        // circuit_builder has no resources to free
         self.dht.deinit();
         self.storage.deinit();
         self.qvl_store.deinit();
