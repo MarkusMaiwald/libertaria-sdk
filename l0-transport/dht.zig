@@ -90,6 +90,19 @@ pub const RoutingTable = struct {
         }
     }
 
+    pub fn findNode(self: *RoutingTable, target: NodeId) ?RemoteNode {
+        const cpl = commonPrefixLen(self.self_id, target);
+        const bucket_idx = if (cpl == ID_LEN * 8) ID_LEN * 8 - 1 else cpl;
+        const bucket = &self.buckets[bucket_idx];
+
+        for (bucket.nodes.items) |node| {
+            if (std.mem.eql(u8, &node.id, &target)) {
+                return node;
+            }
+        }
+        return null;
+    }
+
     pub fn findClosest(self: *RoutingTable, target: NodeId, count: usize) ![]RemoteNode {
         var results = std.ArrayList(RemoteNode){};
         defer results.deinit(self.allocator);

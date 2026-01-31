@@ -199,6 +199,7 @@ pub const CapsuleNode = struct {
                 allocator,
                 qvl_store,
                 &self.peer_table,
+                &self.dht,
             );
             std.log.info("Circuit Builder: ENABLED (trust threshold: {d})", .{config.relay_trust_threshold});
         }

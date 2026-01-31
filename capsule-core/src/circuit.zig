@@ -4,9 +4,10 @@
 
 const std = @import("std");
 const relay = @import("relay");
-const dht = @import("dht"); // Needed for NodeId type
+const dht = @import("dht");
 const QvlStore = @import("qvl_store.zig").QvlStore;
 const PeerTable = @import("peer_table.zig").PeerTable;
+const DhtService = dht.DhtService;
 
 pub const CircuitError = error{
     NoRelaysAvailable,
@@ -19,24 +20,26 @@ pub const CircuitBuilder = struct {
     allocator: std.mem.Allocator,
     qvl_store: *QvlStore,
     peer_table: *PeerTable,
+    dht: *DhtService,
     onion_builder: relay.OnionBuilder,
 
-    pub fn init(allocator: std.mem.Allocator, qvl_store: *QvlStore, peer_table: *PeerTable) CircuitBuilder {
+    pub fn init(allocator: std.mem.Allocator, qvl_store: *QvlStore, peer_table: *PeerTable, dht_service: *DhtService) CircuitBuilder {
         return .{
             .allocator = allocator,
             .qvl_store = qvl_store,
             .peer_table = peer_table,
+            .dht = dht_service,
             .onion_builder = relay.OnionBuilder.init(allocator),
         };
     }
 
     /// Builds a 1-hop circuit (MVP): Source -> Relay -> Target
-    /// Returns the fully wrapped packet ready to be sent to the Relay.
+    /// Returns the fully wrapped packet ready to be sent to the Relay, and the Relay's address.
     pub fn buildOneHopCircuit(
         self: *CircuitBuilder,
         target_did: []const u8,
         payload: []const u8,
-    ) !relay.RelayPacket {
+    ) !struct { packet: relay.RelayPacket, first_hop: std.net.Address } {
         // 1. Resolve Target
         // We need the Target's NodeID (for the inner routing header).
         // For MVP, we assume DID ~= NodeID or we have a mapping.
@@ -77,19 +80,18 @@ pub const CircuitBuilder = struct {
         // So the Relay forwards the *Inner Payload* to Target.
         // Is the Inner Payload encrypted for Target? YES.
 
-        // Mock Session secrets
-        const relay_secret = [_]u8{0xAA} ** 32;
+        // Resolve Relay Keys from DHT
+        const relay_node = self.dht.routing_table.findNode(relay_id) orelse return error.RelayNotFound;
+        const relay_pubkey = relay_node.key;
+
+        // Generate SessionID (Client-side)
+        var session_id: [16]u8 = undefined;
+        std.crypto.random.bytes(&session_id);
 
         // Wrap: Relay Packet -> [ NextHop: Target | Payload ]
-        const packet = try self.onion_builder.wrapLayer(payload, target_id, relay_secret);
+        const packet = try self.onion_builder.wrapLayer(payload, target_id, relay_pubkey, session_id);
 
-        // The `packet` returned is what we send to the Relay.
-        // The Relay will unwrap it, see `target_id`, and forward `packet.payload` to `target_id`.
-        // Note: `packet.payload` here is the original `payload` (if only 1 layer).
-        // If we want E2E encryption for Target, we must have encrypted `payload` beforehand.
-        // This function assumes `payload` is ALREADY E2E encrypted (e.g. LWF frame).
-
-        return packet;
+        return .{ .packet = packet, .first_hop = relay_node.address };
     }
 };
 
