@@ -127,6 +127,23 @@ pub fn build(b: *std.Build) void {
     l1_did_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     // ========================================================================
+    // L1 Slash Protocol & L0 Quarantine
+    // ========================================================================
+    const l1_slash_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/slash.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_mod.addImport("slash", l1_slash_mod);
+
+    const l0_quarantine_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/quarantine.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    utcp_mod.addImport("quarantine", l0_quarantine_mod);
+
+    // ========================================================================
     // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
     // ========================================================================
     const l1_qvl_mod = b.createModule(.{
@@ -220,6 +237,19 @@ pub fn build(b: *std.Build) void {
     });
     l1_did_tests.linkLibC();
     const run_l1_did_tests = b.addRunArtifact(l1_did_tests);
+
+    // L1 Slash tests
+    const l1_slash_tests = b.addTest(.{
+        .root_module = l1_slash_mod,
+    });
+    l1_slash_tests.linkLibC();
+    const run_l1_slash_tests = b.addRunArtifact(l1_slash_tests);
+
+    // L0 Quarantine tests
+    const l0_quarantine_tests = b.addTest(.{
+        .root_module = l0_quarantine_mod,
+    });
+    const run_l0_quarantine_tests = b.addRunArtifact(l0_quarantine_tests);
 
     // Import PQXDH into main L1 module
 
@@ -318,6 +348,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_entropy_tests.step);
     test_step.dependOn(&run_l1_prekey_tests.step);
     test_step.dependOn(&run_l1_did_tests.step);
+    test_step.dependOn(&run_l1_slash_tests.step);
+    test_step.dependOn(&run_l0_quarantine_tests.step);
     test_step.dependOn(&run_l1_vector_tests.step);
     test_step.dependOn(&run_l1_pqxdh_tests.step);
     test_step.dependOn(&run_utcp_tests.step);
