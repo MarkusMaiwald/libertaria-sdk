@@ -656,6 +656,7 @@ pub const CapsuleNode = struct {
                             self.allocator,
                             self.qvl_store,
                             &self.peer_table,
+                            &self.dht,
                         );
                     }
                     self.config.relay_enabled = true;
@@ -690,13 +691,20 @@ pub const CapsuleNode = struct {
             },
             .RelaySend => |args| {
                 if (self.circuit_builder) |*cb| {
-                    // MVP: Build circuit returns ONLY the packet.
-                    // We need to know who the first hop is.
-                    // Let's modify CircuitBuilder to return that info.
-                    // For now, fail with message.
-                    _ = args;
-                    _ = cb;
-                    response = .{ .Error = "RelaySend not yet implemented: CircuitBuilder API requires update to return next hop address." };
+                    if (cb.buildOneHopCircuit(args.target_did, args.message)) |result| {
+                        var packet = result.packet;
+                        defer packet.deinit(self.allocator);
+                        const first_hop = result.first_hop;
+
+                        const encoded = try packet.encode(self.allocator);
+                        defer self.allocator.free(encoded);
+
+                        try self.utcp.send(first_hop, encoded, l0.LWFHeader.ServiceType.RELAY_FORWARD);
+                        response = .{ .Ok = "Packet sent via Relay" };
+                    } else |err| {
+                        std.log.warn("RelaySend failed: {}", .{err});
+                        response = .{ .Error = "Failed to build circuit" };
+                    }
                 } else {
                     response = .{ .Error = "Relay service not enabled" };
                 }

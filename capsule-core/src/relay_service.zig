@@ -8,12 +8,18 @@ const relay_mod = @import("relay");
 const dht_mod = @import("dht");
 
 pub const RelayService = struct {
+    pub const SessionContext = struct {
+        packet_count: u64,
+        last_seen: i64,
+    };
+
     allocator: std.mem.Allocator,
     onion_builder: relay_mod.OnionBuilder,
 
     // Statistics
     packets_forwarded: u64,
     packets_dropped: u64,
+    sessions: std.AutoHashMap([16]u8, SessionContext),
 
     pub fn init(allocator: std.mem.Allocator) RelayService {
         return .{
@@ -21,11 +27,12 @@ pub const RelayService = struct {
             .onion_builder = relay_mod.OnionBuilder.init(allocator),
             .packets_forwarded = 0,
             .packets_dropped = 0,
+            .sessions = std.AutoHashMap([16]u8, SessionContext).init(allocator),
         };
     }
 
     pub fn deinit(self: *RelayService) void {
-        _ = self;
+        self.sessions.deinit();
     }
 
     /// Forward a relay packet to the next hop
@@ -61,6 +68,18 @@ pub const RelayService = struct {
 
         // Forward to next hop
         std.log.debug("Relay: Forwarding session {x} to next hop: {x}", .{ result.session_id, std.fmt.fmtSliceHexLower(&result.next_hop) });
+
+        // Update Sticky Session Stats
+        const now = std.time.timestamp();
+        const gop = try self.sessions.getOrPut(result.session_id);
+        if (!gop.found_existing) {
+            gop.value_ptr.* = .{ .packet_count = 1, .last_seen = now };
+            std.log.info("Relay: New Sticky Session detected: {x}", .{result.session_id});
+        } else {
+            gop.value_ptr.packet_count += 1;
+            gop.value_ptr.last_seen = now;
+        }
+
         self.packets_forwarded += 1;
 
         // Result payload includes the re-wrapped inner onion?
@@ -93,18 +112,30 @@ test "RelayService: Forward packet" {
     // Create a test packet
     const payload = "Test payload";
     const next_hop = [_]u8{0xAB} ** 32;
-    const shared_secret = [_]u8{0} ** 32;
+    // const shared_secret = [_]u8{0} ** 32; // Not used directly anymore, using private key
+
+    // Generate keys
+    const receiver_kp = std.crypto.dh.X25519.KeyPair.generate();
+    const receiver_pub = receiver_kp.public_key;
+    const receiver_priv = receiver_kp.secret_key;
+
+    const session_id = [_]u8{0x11} ** 16;
 
     var onion_builder = relay_mod.OnionBuilder.init(allocator);
-    var packet = try onion_builder.wrapLayer(payload, next_hop, shared_secret);
+    // Wrap layer targeting the receiver
+    var packet = try onion_builder.wrapLayer(payload, next_hop, receiver_pub, session_id, null);
     defer packet.deinit(allocator);
 
-    // Forward the packet
-    const result = try relay_service.forwardPacket(packet, shared_secret);
+    const encoded = try packet.encode(allocator);
+    defer allocator.free(encoded);
+
+    // Forward the packet (pass encoded bytes)
+    const result = try relay_service.forwardPacket(encoded, receiver_priv);
     defer allocator.free(result.payload);
 
     try std.testing.expectEqualSlices(u8, &next_hop, &result.next_hop);
     try std.testing.expectEqualSlices(u8, payload, result.payload);
+    try std.testing.expectEqualSlices(u8, &session_id, &result.session_id);
 
     // Check stats
     const stats = relay_service.getStats();

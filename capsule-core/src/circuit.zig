@@ -5,9 +5,18 @@
 const std = @import("std");
 const relay = @import("relay");
 const dht = @import("dht");
+const crypto = std.crypto;
 const QvlStore = @import("qvl_store.zig").QvlStore;
 const PeerTable = @import("peer_table.zig").PeerTable;
 const DhtService = dht.DhtService;
+
+pub const ActiveCircuit = struct {
+    session_id: [16]u8,
+    relay_address: std.net.Address,
+    relay_pubkey: [32]u8,
+    // Sticky Ephemeral Key (for optimizations)
+    ephemeral_keypair: crypto.dh.X25519.KeyPair,
+};
 
 pub const CircuitError = error{
     NoRelaysAvailable,
@@ -89,9 +98,46 @@ pub const CircuitBuilder = struct {
         std.crypto.random.bytes(&session_id);
 
         // Wrap: Relay Packet -> [ NextHop: Target | Payload ]
-        const packet = try self.onion_builder.wrapLayer(payload, target_id, relay_pubkey, session_id);
+        const packet = try self.onion_builder.wrapLayer(payload, target_id, relay_pubkey, session_id, null);
 
         return .{ .packet = packet, .first_hop = relay_node.address };
+    }
+
+    /// Create a sticky session circuit
+    pub fn createCircuit(self: *CircuitBuilder, relay_did: ?[]const u8) !ActiveCircuit {
+        // Select Relay (Random if null)
+        const selected_did = if (relay_did) |did| try self.allocator.dupe(u8, did) else blk: {
+            const trusted = try self.qvl_store.getTrustedRelays(0.5, 1);
+            if (trusted.len == 0) return error.NoRelaysAvailable;
+            break :blk trusted[0];
+        };
+        defer self.allocator.free(selected_did);
+
+        // Resolve Relay Keys
+        var relay_id = [_]u8{0} ** 32;
+        if (selected_did.len >= 32) @memcpy(&relay_id, selected_did[0..32]);
+
+        const relay_node = self.dht.routing_table.findNode(relay_id) orelse return error.RelayNotFound;
+
+        const kp = crypto.dh.X25519.KeyPair.generate();
+        var session_id: [16]u8 = undefined;
+        std.crypto.random.bytes(&session_id);
+
+        return ActiveCircuit{
+            .session_id = session_id,
+            .relay_address = relay_node.address,
+            .relay_pubkey = relay_node.key,
+            .ephemeral_keypair = kp,
+        };
+    }
+
+    /// Send a payload on an existing circuit (reusing session/keys)
+    pub fn sendOnCircuit(self: *CircuitBuilder, circuit: *ActiveCircuit, target_did: []const u8, payload: []const u8) !relay.RelayPacket {
+        var target_id = [_]u8{0} ** 32;
+        if (target_did.len >= 32) @memcpy(&target_id, target_did[0..32]);
+
+        // Use stored keys for stickiness
+        return self.onion_builder.wrapLayer(payload, target_id, circuit.relay_pubkey, circuit.session_id, circuit.ephemeral_keypair);
     }
 };
 

@@ -95,9 +95,10 @@ pub const OnionBuilder = struct {
         next_hop: [32]u8,
         next_hop_pubkey: [32]u8,
         session_id: [16]u8,
+        ephemeral_keypair: ?crypto.dh.X25519.KeyPair,
     ) !RelayPacket {
-        // 1. Generate Ephemeral Keypair
-        const kp = crypto.dh.X25519.KeyPair.generate();
+        // 1. Generate or Use Ephemeral Keypair
+        const kp = ephemeral_keypair orelse crypto.dh.X25519.KeyPair.generate();
 
         // 2. Compute Shared Secret
         const shared_secret = try crypto.dh.X25519.scalarmult(kp.secret_key, next_hop_pubkey);
@@ -204,7 +205,7 @@ test "Relay: wrap and unwrap" {
 
     const session_id = [_]u8{0xCC} ** 16;
 
-    var packet = try builder.wrapLayer(payload, next_hop, receiver_pubkey, session_id);
+    var packet = try builder.wrapLayer(payload, next_hop, receiver_pubkey, session_id, null);
     defer packet.deinit(allocator);
 
     // Verify it is encrypted (not plain)
