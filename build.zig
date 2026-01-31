@@ -70,6 +70,12 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    const bridge_mod = b.createModule(.{
+        .root_source_file = b.path("l2-federation/bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // ========================================================================
     // Crypto: SHA3/SHAKE & FIPS 202
     // ========================================================================
@@ -272,6 +278,12 @@ pub fn build(b: *std.Build) void {
     });
     const run_relay_tests = b.addRunArtifact(relay_tests);
 
+    // Bridge tests
+    const bridge_tests = b.addTest(.{
+        .root_module = bridge_mod,
+    });
+    const run_bridge_tests = b.addRunArtifact(bridge_tests);
+
     // L1 SoulKey tests (Phase 2B)
     const l1_soulkey_tests = b.addTest(.{
         .root_module = l1_soulkey_mod,
@@ -418,6 +430,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_dht_tests.step);
     test_step.dependOn(&run_gateway_tests.step);
     test_step.dependOn(&run_relay_tests.step);
+    test_step.dependOn(&run_bridge_tests.step);
     test_step.dependOn(&run_l1_qvl_tests.step);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
 
