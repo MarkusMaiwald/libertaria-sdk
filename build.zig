@@ -255,6 +255,17 @@ pub fn build(b: *std.Build) void {
     });
     l1_vector_mod.addImport("time", time_mod);
     l1_vector_mod.addImport("pqxdh", l1_pqxdh_mod);
+    // QVL also needs time (via proof_of_path.zig dependency)
+    l1_qvl_mod.addImport("time", time_mod);
+
+    // QVL FFI (C ABI exports for L2 integration)
+    const l1_qvl_ffi_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/qvl_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_qvl_ffi_mod.addImport("qvl", l1_qvl_mod);
+    l1_qvl_ffi_mod.addImport("time", time_mod);
 
     const l1_vector_tests = b.addTest(.{
         .root_module = l1_vector_mod,
@@ -303,6 +314,17 @@ pub fn build(b: *std.Build) void {
     });
     const run_l1_qvl_tests = b.addRunArtifact(l1_qvl_tests);
     test_step.dependOn(&run_l1_qvl_tests.step);
+
+    // L1 QVL FFI tests (C ABI validation)
+    const l1_qvl_ffi_tests = b.addTest(.{
+        .root_module = l1_qvl_ffi_mod,
+    });
+    l1_qvl_ffi_tests.linkLibC(); // Required for C allocator
+    const run_l1_qvl_ffi_tests = b.addRunArtifact(l1_qvl_ffi_tests);
+    test_step.dependOn(&run_l1_qvl_ffi_tests.step);
+
+    // NOTE: C test harness (test_qvl_ffi.c) can be compiled manually:
+    // zig cc -I. l1-identity/test_qvl_ffi.c zig-out/lib/libqvl_ffi.a -o test_qvl_ffi
 
     // ========================================================================
     // Examples

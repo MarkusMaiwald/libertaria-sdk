@@ -3,6 +3,9 @@
 //! Extends RFC-0120 TrustEdge with risk scoring for Bellman-Ford.
 
 const std = @import("std");
+const time = @import("time");
+
+const SovereignTimestamp = time.SovereignTimestamp;
 
 /// Node identifier (compact u32 index into DID storage)
 pub const NodeId = u32;
@@ -21,20 +24,22 @@ pub const RiskEdge = struct {
     ///   0.0 = Neutral/unknown
     ///   +1.0 = Maximum trust
     risk: f64,
-    /// Entropy stamp for temporal anchoring (RFC-0100)
-    entropy_stamp: u64,
+    /// Temporal anchor for graph ordering (attosecond precision)
+    timestamp: SovereignTimestamp,
+    /// Nonce for path provenance (L0 sequence tied to trust transition)
+    /// Enables: replay protection, exact path reconstruction, routing verification
+    nonce: u64,
     /// Original trust level (for path verification)
     level: u8,
     /// Expiration timestamp
-    expires_at: u32,
+    expires_at: SovereignTimestamp,
 
     pub fn isBetrayal(self: RiskEdge) bool {
         return self.risk < 0.0;
     }
 
-    pub fn isExpired(self: RiskEdge, current_time: u64) bool {
-        if (self.expires_at == 0) return false;
-        return current_time > @as(u64, self.expires_at);
+    pub fn isExpired(self: RiskEdge, current_time: SovereignTimestamp) bool {
+        return current_time.isAfter(self.expires_at);
     }
 };
 
@@ -134,8 +139,9 @@ test "RiskGraph: basic operations" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.5, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .entropy_stamp = 0, .level = 2, .expires_at = 0 }); // Betrayal
+    const ts = SovereignTimestamp.fromSeconds(0, .system_boot);
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.5, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = ts });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 2, .expires_at = ts }); // Betrayal
 
     try std.testing.expectEqual(graph.nodeCount(), 3);
     try std.testing.expectEqual(graph.edgeCount(), 2);

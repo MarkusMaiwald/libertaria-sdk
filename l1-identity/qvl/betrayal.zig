@@ -8,6 +8,7 @@
 //! Complexity: O(|V| × |E|) with early exit optimization.
 
 const std = @import("std");
+const time = @import("time");
 const types = @import("types.zig");
 
 const NodeId = types.NodeId;
@@ -209,8 +210,8 @@ test "Bellman-Ford: No betrayal in clean graph" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.5, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.3, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.5, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.3, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
 
     var result = try detectBetrayal(&graph, 0, allocator);
     defer result.deinit();
@@ -230,9 +231,9 @@ test "Bellman-Ford: Detect negative cycle (betrayal ring)" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.2, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.2, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 2, .to = 0, .risk = -0.8, .entropy_stamp = 0, .level = 1, .expires_at = 0 }); // Betrayal!
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.2, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.2, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 2, .to = 0, .risk = -0.8, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal!
 
     var result = try detectBetrayal(&graph, 0, allocator);
     defer result.deinit();
@@ -252,11 +253,11 @@ test "Bellman-Ford: Sybil ring detection (5-node cartel)" {
     }
 
     // Each edge: 0.1 vouch, but one edge -0.6 betrayal
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.1, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.1, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 2, .to = 3, .risk = 0.1, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 3, .to = 4, .risk = 0.1, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 4, .to = 0, .risk = -0.6, .entropy_stamp = 0, .level = 1, .expires_at = 0 }); // Betrayal closes ring
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 2, .to = 3, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 3, .to = 4, .risk = 0.1, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 4, .to = 0, .risk = -0.6, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal closes ring
 
     var result = try detectBetrayal(&graph, 0, allocator);
     defer result.deinit();

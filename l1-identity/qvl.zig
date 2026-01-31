@@ -13,6 +13,7 @@ pub const betrayal = @import("qvl/betrayal.zig");
 pub const pathfinding = @import("qvl/pathfinding.zig");
 pub const gossip = @import("qvl/gossip.zig");
 pub const inference = @import("qvl/inference.zig");
+pub const pop = @import("qvl/pop_integration.zig");
 
 pub const RiskEdge = types.RiskEdge;
 pub const NodeId = types.NodeId;

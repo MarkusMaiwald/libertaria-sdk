@@ -7,6 +7,7 @@
 //! Complexity: O(|E| + |V| log |V|) with binary heap.
 
 const std = @import("std");
+const time = @import("time");
 const types = @import("types.zig");
 
 const NodeId = types.NodeId;
@@ -185,8 +186,8 @@ test "A* Pathfinding: Direct path" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.3, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.2, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.3, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.2, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
 
     const dummy_ctx: u8 = 0;
     var result = try findTrustPath(&graph, 0, 2, zeroHeuristic, @ptrCast(&dummy_ctx), allocator);
@@ -243,9 +244,9 @@ test "A* Pathfinding: Multiple paths, chooses shortest" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.4, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.4, .entropy_stamp = 0, .level = 3, .expires_at = 0 });
-    try graph.addEdge(.{ .from = 0, .to = 2, .risk = 0.5, .entropy_stamp = 0, .level = 3, .expires_at = 0 }); // Direct shorter
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.4, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.4, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 0, .to = 2, .risk = 0.5, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Direct shorter
 
     const dummy_ctx: u8 = 0;
     var result = try findTrustPath(&graph, 0, 2, zeroHeuristic, @ptrCast(&dummy_ctx), allocator);
