@@ -280,6 +280,67 @@ pub const SovereignTimestamp = struct {
 };
 
 // ============================================================================
+// SOVEREIGN EPOCH
+// ============================================================================
+
+/// Standard Epoch Duration (1 Hour)
+/// Used for Key Rotation, Session Renewal, and Cron synchronization.
+pub const EPOCH_DURATION_AS: u128 = 3600 * ATTOSECONDS_PER_SECOND;
+
+/// A Sovereign Epoch represents a fixed time slice in the timeline.
+pub const Epoch = struct {
+    /// Sequential index of the epoch since Anchor
+    index: u64,
+
+    /// Get the epoch containing a specific timestamp
+    pub fn fromTimestamp(ts: SovereignTimestamp) Epoch {
+        // We calculate epoch relative to the generic timeline raw value
+        // Note: This implies different anchors might align epochs differently unless normalized.
+        // For simplicity, we define Epoch 0 starts at raw=0.
+        const idx = @as(u64, @intCast(ts.raw / EPOCH_DURATION_AS));
+        return .{ .index = idx };
+    }
+
+    /// Get current epoch
+    pub fn current() Epoch {
+        return fromTimestamp(SovereignTimestamp.now());
+    }
+
+    /// Get start timestamp of this epoch
+    pub fn startTime(self: Epoch, anchor: AnchorEpoch) SovereignTimestamp {
+        return SovereignTimestamp.fromAttoseconds(@as(u128, self.index) * EPOCH_DURATION_AS, anchor);
+    }
+
+    /// Get end timestamp of this epoch (exclusive)
+    pub fn endTime(self: Epoch, anchor: AnchorEpoch) SovereignTimestamp {
+        return SovereignTimestamp.fromAttoseconds(@as(u128, self.index + 1) * EPOCH_DURATION_AS, anchor);
+    }
+
+    /// Get duration until next epoch start (for sleep/cron)
+    pub fn timeRemaining(self: Epoch, current_ts: SovereignTimestamp) Duration {
+        const end_ts = self.endTime(current_ts.anchor);
+        return Duration.fromAttoseconds(end_ts.since(current_ts));
+    }
+
+    /// Check if a timestamp is within this epoch
+    pub fn contains(self: Epoch, ts: SovereignTimestamp) bool {
+        const other_idx = @as(u64, @intCast(ts.raw / EPOCH_DURATION_AS));
+        return self.index == other_idx;
+    }
+
+    /// Get next epoch
+    pub fn next(self: Epoch) Epoch {
+        return .{ .index = self.index + 1 };
+    }
+
+    /// Get previous epoch
+    pub fn prev(self: Epoch) Epoch {
+        if (self.index == 0) return self;
+        return .{ .index = self.index - 1 };
+    }
+};
+
+// ============================================================================
 // COMPACT TIMESTAMP (Kenya Optimization)
 // ============================================================================
 
@@ -488,4 +549,23 @@ test "SovereignTimestamp: validation" {
     // Too old (> 30 days)
     const old = now.sub(31 * 24 * 3600 * ATTOSECONDS_PER_SECOND);
     try std.testing.expectEqual(SovereignTimestamp.ValidationResult.too_old, old.validateForVector(now));
+}
+
+test "Epoch: calculation" {
+    // 1 Hour = 3600 seconds
+    const t0 = SovereignTimestamp.fromSeconds(0, .unix_1970);
+    const e0 = Epoch.fromTimestamp(t0);
+    try std.testing.expectEqual(@as(u64, 0), e0.index);
+
+    const t1 = SovereignTimestamp.fromSeconds(3599, .unix_1970);
+    const e1 = Epoch.fromTimestamp(t1);
+    try std.testing.expectEqual(@as(u64, 0), e1.index);
+
+    const t2 = SovereignTimestamp.fromSeconds(3600, .unix_1970);
+    const e2 = Epoch.fromTimestamp(t2);
+    try std.testing.expectEqual(@as(u64, 1), e2.index);
+
+    // Remaining time
+    const rem = e0.timeRemaining(t1);
+    try std.testing.expectEqual(@as(u128, 1) * ATTOSECONDS_PER_SECOND, rem.as);
 }
