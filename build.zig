@@ -267,6 +267,14 @@ pub fn build(b: *std.Build) void {
     l1_qvl_ffi_mod.addImport("qvl", l1_qvl_mod);
     l1_qvl_ffi_mod.addImport("time", time_mod);
 
+    // QVL FFI static library (for Rust L2 Membrane Agent)
+    const qvl_ffi_lib = b.addLibrary(.{
+        .name = "qvl_ffi",
+        .root_module = l1_qvl_ffi_mod,
+        .linkage = .static, // Static library
+    });
+    qvl_ffi_lib.linkLibC();
+    b.installArtifact(qvl_ffi_lib);
 
     const l1_vector_tests = b.addTest(.{
         .root_module = l1_vector_mod,
