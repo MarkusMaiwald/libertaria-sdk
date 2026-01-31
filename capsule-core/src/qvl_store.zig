@@ -246,4 +246,38 @@ pub const QvlStore = struct {
 
         return events;
     }
+
+    /// Retrieve a list of trusted relay DIDs based on QVL scores.
+    pub fn getTrustedRelays(self: *QvlStore, min_score: f64, limit: usize) ![][]u8 {
+        const sql_slice = try std.fmt.allocPrint(self.allocator, "SELECT did FROM qvl_vertices WHERE trust_score >= {d} ORDER BY trust_score DESC LIMIT {d};", .{ min_score, limit });
+        defer self.allocator.free(sql_slice);
+        const sql = try self.allocator.dupeZ(u8, sql_slice);
+        defer self.allocator.free(sql);
+
+        var res: c.duckdb_result = undefined;
+        if (c.duckdb_query(self.conn, sql.ptr, &res) != c.DuckDBSuccess) {
+            std.log.err("DuckDB Relay Query Error: {s}", .{c.duckdb_result_error(&res)});
+            c.duckdb_destroy_result(&res);
+            return error.QueryFailed;
+        }
+        defer c.duckdb_destroy_result(&res);
+
+        const row_count = c.duckdb_row_count(&res);
+        // If we found nothing, return empty slice
+        if (row_count == 0) return &[_][]u8{};
+
+        var relays = try self.allocator.alloc([]u8, row_count);
+
+        for (0..row_count) |i| {
+            const val = c.duckdb_value_varchar(&res, i, 0);
+            defer c.duckdb_free(val);
+            if (val == null) {
+                // Should not happen if DB is correct, but handle safely
+                relays[i] = try self.allocator.dupe(u8, "UNKNOWN");
+            } else {
+                relays[i] = try self.allocator.dupe(u8, std.mem.span(val));
+            }
+        }
+        return relays;
+    }
 };

@@ -21,6 +21,7 @@ const storage_mod = @import("storage.zig");
 const qvl_store_mod = @import("qvl_store.zig");
 const control_mod = @import("control.zig");
 const quarantine_mod = @import("quarantine");
+const circuit_mod = @import("circuit.zig");
 
 const NodeConfig = config_mod.NodeConfig;
 const UTCP = utcp_mod.UTCP;
