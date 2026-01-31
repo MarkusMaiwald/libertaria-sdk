@@ -289,6 +289,52 @@ pub const CapsuleNode = struct {
 
                         if (frame.header.service_type == fed.SERVICE_TYPE) {
                             try self.handleFederationMessage(result.sender, frame);
+                        } else if (frame.header.service_type == l0.LWFHeader.ServiceType.RELAY_FORWARD) {
+                            // Phase 14: Relay Forwarding
+                            if (self.relay_service) |*rs| {
+                                std.log.debug("Relay: Received relay packet from {f}", .{result.sender});
+                                // Mock secret for now (needs ECDH)
+                                const shared_secret = [_]u8{0xAA} ** 32;
+
+                                // Unwrap and forward
+                                if (rs.forwardPacket(frame.payload, shared_secret)) |next_hop_data| {
+                                    // next_hop_data.payload is now the INNER payload
+                                    const next_node_id = next_hop_data.next_hop;
+
+                                    // Resolve next hop address
+                                    // TODO: Check if we are final destination (all zeros) handled by forwardPacket
+                                    // But forwardPacket returns the result to US to send.
+
+                                    var is_final = true;
+                                    for (next_node_id) |b| {
+                                        if (b != 0) {
+                                            is_final = false;
+                                            break;
+                                        }
+                                    }
+
+                                    if (is_final) {
+                                        // We are the destination!
+                                        // TODO: Process inner payload as a new frame
+                                        std.log.info("Relay: Final Packet Received! Size: {d}", .{next_hop_data.payload.len});
+                                        // Forward to next hop
+                                        // Need to lookup IP for next_node_id
+                                        const next_remote = self.dht.routing_table.findNode(next_node_id);
+                                        if (next_remote) |remote| {
+                                            // Re-wrap in LWF for transport
+                                            try self.utcp.send(remote.address, next_hop_data.payload, l0.LWFHeader.ServiceType.RELAY_FORWARD);
+                                            std.log.info("Relay: Forwarded packet to {f}", .{remote.address});
+                                        } else {
+                                            std.log.warn("Relay: Next hop {x} not found in routing table", .{next_node_id[0..4]});
+                                        }
+                                    }
+                                    self.allocator.free(next_hop_data.payload);
+                                } else |err| {
+                                    std.log.warn("Relay: Failed to forward packet: {}", .{err});
+                                }
+                            } else {
+                                std.log.debug("Relay: Received relay packet but relay_service is disabled.", .{});
+                            }
                         }
                     } else |err| {
                         if (err != error.WouldBlock) std.log.warn("UTCP receive error: {}", .{err});
@@ -609,6 +655,61 @@ pub const CapsuleNode = struct {
             .Topology => {
                 const topo = try self.getTopology();
                 response = .{ .TopologyInfo = topo };
+            },
+            .RelayControl => |args| {
+                if (args.enable) {
+                    if (self.relay_service == null) {
+                        self.relay_service = relay_service_mod.RelayService.init(self.allocator);
+                    }
+                    if (self.circuit_builder == null) {
+                        self.circuit_builder = circuit_mod.CircuitBuilder.init(
+                            self.allocator,
+                            self.qvl_store,
+                            &self.peer_table,
+                        );
+                    }
+                    self.config.relay_enabled = true;
+                    self.config.relay_trust_threshold = args.trust_threshold;
+                    response = .{ .Ok = "Relay Service Enabled" };
+                } else {
+                    if (self.relay_service) |*rs| rs.deinit();
+                    self.relay_service = null;
+                    if (self.circuit_builder) |_| {} // Lightweight
+                    self.circuit_builder = null;
+                    self.config.relay_enabled = false;
+                    response = .{ .Ok = "Relay Service Disabled" };
+                }
+            },
+            .RelayStats => {
+                if (self.relay_service) |*rs| {
+                    const stats = rs.getStats();
+                    response = .{ .RelayStatsInfo = .{
+                        .enabled = true,
+                        .packets_forwarded = stats.packets_forwarded,
+                        .packets_dropped = stats.packets_dropped,
+                        .trust_threshold = self.config.relay_trust_threshold,
+                    } };
+                } else {
+                    response = .{ .RelayStatsInfo = .{
+                        .enabled = false,
+                        .packets_forwarded = 0,
+                        .packets_dropped = 0,
+                        .trust_threshold = self.config.relay_trust_threshold,
+                    } };
+                }
+            },
+            .RelaySend => |args| {
+                if (self.circuit_builder) |*cb| {
+                    // MVP: Build circuit returns ONLY the packet.
+                    // We need to know who the first hop is.
+                    // Let's modify CircuitBuilder to return that info.
+                    // For now, fail with message.
+                    _ = args;
+                    _ = cb;
+                    response = .{ .Error = "RelaySend not yet implemented: CircuitBuilder API requires update to return next hop address." };
+                } else {
+                    response = .{ .Error = "Relay service not enabled" };
+                }
             },
         }
 

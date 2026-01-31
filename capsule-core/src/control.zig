@@ -38,6 +38,12 @@ pub const Command = union(enum) {
     Shutdown: void,
     /// Get Topology for Graph Visualization
     Topology: void,
+    /// Start/Stop Relay Service
+    RelayControl: RelayControlArgs,
+    /// Get Relay Stats
+    RelayStats: void,
+    /// Build Circuit and Send Message
+    RelaySend: RelaySendArgs,
 };
 
 pub const SlashArgs = struct {
@@ -75,6 +81,16 @@ pub const AirlockArgs = struct {
     state: []const u8,
 };
 
+pub const RelayControlArgs = struct {
+    enable: bool,
+    trust_threshold: f64 = 0.5,
+};
+
+pub const RelaySendArgs = struct {
+    target_did: []const u8,
+    message: []const u8,
+};
+
 /// Responses sent from Daemon to CLI
 pub const Response = union(enum) {
     /// General status info
@@ -99,6 +115,8 @@ pub const Response = union(enum) {
     Ok: []const u8,
     /// Error message
     Error: []const u8,
+    /// Relay Statistics
+    RelayStatsInfo: RelayStatsInfo,
 };
 
 pub const NodeStatus = struct {
@@ -170,4 +188,11 @@ pub const SlashEvent = struct {
     reason: []const u8,
     severity: []const u8,
     evidence_hash: []const u8,
+};
+
+pub const RelayStatsInfo = struct {
+    enabled: bool,
+    packets_forwarded: u64,
+    packets_dropped: u64,
+    trust_threshold: f64,
 };

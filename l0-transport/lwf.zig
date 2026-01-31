@@ -60,6 +60,7 @@ pub const LWFHeader = struct {
         pub const SLASH_PROTOCOL: u16 = 0x0002;
         pub const IDENTITY_SIGNAL: u16 = 0x0003;
         pub const ECONOMIC_SETTLEMENT: u16 = 0x0004;
+        pub const RELAY_FORWARD: u16 = 0x0005; // Phase 14: Onion routing
     };
 
     magic: [4]u8, // "LWF\0"
