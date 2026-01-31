@@ -1,0 +1,27 @@
+[package]
+name = "membrane-agent"
+version = "0.1.0"
+edition = "2021"
+authors = ["Markus Maiwald <markus@libertaria.world>"]
+description = "L2 Membrane Agent - Trust-based policy enforcement daemon for Libertaria"
+license = "MIT OR Apache-2.0"
+
+[dependencies]
+tokio = { version = "1", features = ["full"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"
+chrono = "0.4"
+thiserror = "1.0"
+
+[build-dependencies]
+cc = "1.0"
+
+[lib]
+name = "membrane_agent"
+path = "src/lib.rs"
+
+[[bin]]
+name = "membrane-agent"
+path = "src/main.rs"
+
+[dev-dependencies]
