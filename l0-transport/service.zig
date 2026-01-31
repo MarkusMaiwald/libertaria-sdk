@@ -13,11 +13,11 @@ pub const L0Service = struct {
     opq_manager: opq.OPQManager,
 
     /// Initialize the L0 service with a bound socket and storage
-    pub fn init(allocator: std.mem.Allocator, address: std.net.Address, base_dir: []const u8, persona: opq.Persona) !L0Service {
+    pub fn init(allocator: std.mem.Allocator, address: std.net.Address, base_dir: []const u8, persona: opq.Persona, resolver: opq.trust_resolver.TrustResolver) !L0Service {
         return L0Service{
             .allocator = allocator,
             .socket = try utcp.UTCP.init(address),
-            .opq_manager = try opq.OPQManager.init(allocator, base_dir, persona),
+            .opq_manager = try opq.OPQManager.init(allocator, base_dir, persona, resolver),
         };
     }
 
@@ -59,7 +59,7 @@ test "L0 Integrated Service: Loopback Ingestion" {
     const addr = try std.net.Address.parseIp("127.0.0.1", 0);
 
     // 1. Start Service (Relay persona)
-    var service = try L0Service.init(allocator, addr, test_dir, .relay);
+    var service = try L0Service.init(allocator, addr, test_dir, .relay, opq.trust_resolver.TrustResolver.noop());
     defer service.deinit();
 
     const service_addr = try service.socket.getLocalAddress();

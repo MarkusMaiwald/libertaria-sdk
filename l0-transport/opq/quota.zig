@@ -11,11 +11,19 @@ pub const Persona = enum {
     gateway,
 };
 
+pub const TrustCategory = enum(u8) {
+    peer = 0, // Everyone else
+    friend = 1, // In my trust graph
+    infrastructure = 2, // Known relays, bootstrap nodes
+};
+
 pub const Policy = struct {
     persona: Persona,
     max_retention_seconds: i64,
     max_storage_bytes: u64,
     segment_size: usize,
+
+    pub const EVICTION_ORDERING = [_]TrustCategory{ .peer, .friend, .infrastructure };
 
     pub fn init(persona: Persona) Policy {
         return switch (persona) {

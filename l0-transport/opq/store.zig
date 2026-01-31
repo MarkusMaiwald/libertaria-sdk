@@ -27,6 +27,13 @@ pub const SegmentHeader = struct {
     pub const SIZE = 4 + 1 + 3 + 8 + 4 + 8; // 28 bytes
 };
 
+pub const WALLocation = struct {
+    segment_id: u64,
+    segment_seq: u32,
+    offset: usize,
+    len: usize,
+};
+
 pub const WALStore = struct {
     allocator: std.mem.Allocator,
     base_dir_path: []const u8,
@@ -58,7 +65,7 @@ pub const WALStore = struct {
     }
 
     /// Append a frame to the active segment
-    pub fn appendFrame(self: *WALStore, frame: *const lwf.LWFFrame) !void {
+    pub fn appendFrame(self: *WALStore, frame: *const lwf.LWFFrame) !WALLocation {
         const frame_size = frame.header.payload_len + lwf.LWFHeader.SIZE + lwf.LWFTrailer.SIZE;
 
         // Check if we need a new segment
@@ -70,8 +77,16 @@ pub const WALStore = struct {
         const encoded = try frame.encode(self.allocator);
         defer self.allocator.free(encoded);
 
+        const loc = WALLocation{
+            .segment_id = self.active_segment_id,
+            .segment_seq = self.active_segment_seq,
+            .offset = self.current_offset,
+            .len = encoded.len,
+        };
+
         try file.writeAll(encoded);
         self.current_offset += encoded.len;
+        return loc;
     }
 
     fn rotateSegment(self: *WALStore) !void {
@@ -258,7 +273,7 @@ test "OPQ WAL Store: Append and Rotate" {
     // 1024 / 208 ≈ 4 frames per segment (plus header)
     var i: usize = 0;
     while (i < 10) : (i += 1) {
-        try wal.appendFrame(&frame);
+        _ = try wal.appendFrame(&frame);
     }
 
     // 3. Verify files created
@@ -288,7 +303,7 @@ test "OPQ WAL Store: Pruning" {
 
     var frame = try lwf.LWFFrame.init(allocator, 10);
     defer frame.deinit(allocator);
-    try wal.appendFrame(&frame);
+    _ = try wal.appendFrame(&frame);
 
     // Manually finalize and wait 2 seconds (for test purposes we could mock time,
     // but here we'll just test the logic with a very small TTL)
@@ -318,7 +333,7 @@ test "OPQ WAL Store: Space-based Pruning" {
     // Append 4 frames (should create multiple segments)
     var i: usize = 0;
     while (i < 4) : (i += 1) {
-        try wal.appendFrame(&frame);
+        _ = try wal.appendFrame(&frame);
     }
 
     const usage_before = try wal.getDiskUsage();

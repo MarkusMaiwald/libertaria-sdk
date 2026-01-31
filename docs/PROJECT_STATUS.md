@@ -101,9 +101,9 @@ The Libertaria L0-L1 SDK in Zig is **reaching maturity with 50% scope complete**
   - ⏳ Queue manifest generation
   - ✅ Automatic pruning of expired packets
 - ⏳ Frame validation pipeline
-  - ⏳ Deterministic ordering
-  - ⏳ Replay attack detection
-  - ⏳ Trust distance integration
+  - ✅ Deterministic ordering (Sequencer + Reorder Buffer)
+  - ✅ Replay attack detection (Replay Filter)
+  - ✅ Trust distance integration (Resolver + Categories)
 - **Dependency:** Requires Phase 3 (DONE ✅)
 - **Blocks:** Phase 5 FFI boundary
 - **Estimated:** 3 weeks
