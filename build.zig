@@ -142,6 +142,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     utcp_mod.addImport("quarantine", l0_quarantine_mod);
+    l0_service_mod.addImport("quarantine", l0_quarantine_mod);
 
     // ========================================================================
     // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
