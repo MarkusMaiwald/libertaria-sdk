@@ -51,6 +51,25 @@ pub fn build(b: *std.Build) void {
     l0_service_mod.addImport("utcp", utcp_mod);
     l0_service_mod.addImport("opq", opq_mod);
 
+    const dht_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/dht.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const gateway_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/gateway.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    gateway_mod.addImport("dht", dht_mod);
+
+    const relay_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/relay.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     // ========================================================================
     // Crypto: SHA3/SHAKE & FIPS 202
     // ========================================================================
@@ -235,6 +254,24 @@ pub fn build(b: *std.Build) void {
     });
     const run_l0_service_tests = b.addRunArtifact(l0_service_tests);
 
+    // DHT tests
+    const dht_tests = b.addTest(.{
+        .root_module = dht_mod,
+    });
+    const run_dht_tests = b.addRunArtifact(dht_tests);
+
+    // Gateway tests
+    const gateway_tests = b.addTest(.{
+        .root_module = gateway_mod,
+    });
+    const run_gateway_tests = b.addRunArtifact(gateway_tests);
+
+    // Relay tests
+    const relay_tests = b.addTest(.{
+        .root_module = relay_mod,
+    });
+    const run_relay_tests = b.addRunArtifact(relay_tests);
+
     // L1 SoulKey tests (Phase 2B)
     const l1_soulkey_tests = b.addTest(.{
         .root_module = l1_soulkey_mod,
@@ -320,6 +357,7 @@ pub fn build(b: *std.Build) void {
     l1_vector_mod.addImport("time", time_mod);
     l1_vector_mod.addImport("pqxdh", l1_pqxdh_mod);
     l1_vector_mod.addImport("trust_graph", l1_trust_graph_mod);
+    l1_vector_mod.addImport("soulkey", l1_soulkey_mod);
 
     const l1_vector_tests = b.addTest(.{
         .root_module = l1_vector_mod,
@@ -377,6 +415,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_utcp_tests.step);
     test_step.dependOn(&run_opq_tests.step);
     test_step.dependOn(&run_l0_service_tests.step);
+    test_step.dependOn(&run_dht_tests.step);
+    test_step.dependOn(&run_gateway_tests.step);
+    test_step.dependOn(&run_relay_tests.step);
     test_step.dependOn(&run_l1_qvl_tests.step);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
 
@@ -442,6 +483,10 @@ pub fn build(b: *std.Build) void {
     // Link L1 (Identity)
     capsule_mod.addImport("l1_identity", l1_mod);
     capsule_mod.addImport("qvl", l1_qvl_mod);
+    capsule_mod.addImport("dht", dht_mod);
+    capsule_mod.addImport("gateway", gateway_mod);
+    capsule_mod.addImport("relay", relay_mod);
+    capsule_mod.addImport("quarantine", l0_quarantine_mod);
 
     const capsule_exe = b.addExecutable(.{
         .name = "capsule",

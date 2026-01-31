@@ -36,6 +36,8 @@ pub const Command = union(enum) {
     Airlock: AirlockArgs,
     /// Shutdown the daemon (admin only)
     Shutdown: void,
+    /// Get Topology for Graph Visualization
+    Topology: void,
 };
 
 pub const SlashArgs = struct {
@@ -87,6 +89,8 @@ pub const Response = union(enum) {
     IdentityInfo: IdentityInfo,
     /// Lockdown status
     LockdownStatus: LockdownInfo,
+    /// Topology info
+    TopologyInfo: TopologyInfo,
     /// QVL query results
     QvlResult: QvlMetrics,
     /// Slash Log results
@@ -140,6 +144,24 @@ pub const LockdownInfo = struct {
     is_locked: bool,
     airlock_state: []const u8, // "open", "restricted", "closed"
     locked_since: i64,
+};
+
+pub const TopologyInfo = struct {
+    nodes: []const GraphNode,
+    edges: []const GraphEdge,
+};
+
+pub const GraphNode = struct {
+    id: []const u8, // short did or node id
+    trust_score: f64,
+    status: []const u8, // "active", "slashed", "ok"
+    role: []const u8, // "self", "peer"
+};
+
+pub const GraphEdge = struct {
+    source: []const u8,
+    target: []const u8,
+    weight: f64,
 };
 
 pub const SlashEvent = struct {

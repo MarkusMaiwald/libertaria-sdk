@@ -5,7 +5,7 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("sqlite3.h");
 });
-const dht = @import("dht.zig");
+const dht = @import("dht");
 
 pub const RemoteNode = dht.RemoteNode;
 pub const ID_LEN = dht.ID_LEN;
@@ -95,7 +95,7 @@ pub const StorageService = struct {
         _ = c.sqlite3_bind_blob(stmt, 1, &node.id, @intCast(node.id.len), null);
 
         // Bind Address
-        var addr_buf: [64]u8 = undefined;
+        var addr_buf: [1024]u8 = undefined;
         const addr_str = try std.fmt.bufPrintZ(&addr_buf, "{any}", .{node.address});
         _ = c.sqlite3_bind_text(stmt, 2, addr_str.ptr, -1, null);
 

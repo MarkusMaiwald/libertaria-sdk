@@ -44,6 +44,14 @@ pub const FederationMessage = union(enum) {
     dht_nodes: struct {
         nodes: []const DhtNode,
     },
+    // Gateway Coordination
+    hole_punch_request: struct {
+        target_id: [32]u8,
+    },
+    hole_punch_notify: struct {
+        peer_id: [32]u8,
+        address: net.Address,
+    },
 
     pub fn encode(self: FederationMessage, writer: anytype) !void {
         try writer.writeByte(@intFromEnum(self));
@@ -78,6 +86,19 @@ pub const FederationMessage = union(enum) {
                     } else {
                         return error.UnsupportedAddressFamily;
                     }
+                }
+            },
+            .hole_punch_request => |r| {
+                try writer.writeAll(&r.target_id);
+            },
+            .hole_punch_notify => |n| {
+                try writer.writeAll(&n.peer_id);
+                // Serialize address (IPv4 only for now)
+                if (n.address.any.family == std.posix.AF.INET) {
+                    try writer.writeAll(&std.mem.toBytes(n.address.in.sa.addr));
+                    try writer.writeInt(u16, n.address.getPort(), .big);
+                } else {
+                    return error.UnsupportedAddressFamily;
                 }
             },
         }
@@ -130,6 +151,22 @@ pub const FederationMessage = union(enum) {
                     };
                 }
                 return .{ .dht_nodes = .{ .nodes = nodes } };
+            },
+            .hole_punch_request => .{
+                .hole_punch_request = .{
+                    .target_id = try reader.readBytesNoEof(32),
+                },
+            },
+            .hole_punch_notify => {
+                const id = try reader.readBytesNoEof(32);
+                const addr_u32 = try reader.readInt(u32, @import("builtin").target.cpu.arch.endian());
+                const port = try reader.readInt(u16, .big);
+                return .{
+                    .hole_punch_notify = .{
+                        .peer_id = id,
+                        .address = net.Address.initIp4(std.mem.toBytes(addr_u32), port),
+                    },
+                };
             },
         };
     }

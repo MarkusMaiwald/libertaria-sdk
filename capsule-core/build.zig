@@ -73,6 +73,12 @@ pub fn build(b: *std.Build) void {
         },
     });
 
+    const vaxis_dep = b.dependency("vaxis", .{
+        .target = target,
+        .optimize = optimize,
+    });
+    const vaxis_mod = vaxis_dep.module("vaxis");
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -89,6 +95,7 @@ pub fn build(b: *std.Build) void {
     exe.root_module.addImport("l1_identity", crypto); // Name mismatch? Step 4902 says l1_identity=crypto
     exe.root_module.addImport("qvl", qvl);
     exe.root_module.addImport("quarantine", quarantine);
+    exe.root_module.addImport("vaxis", vaxis_mod);
 
     exe.linkSystemLibrary("sqlite3");
     exe.linkSystemLibrary("duckdb");

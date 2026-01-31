@@ -15,7 +15,8 @@ const qvl = @import("qvl");
 const discovery_mod = @import("discovery.zig");
 const peer_table_mod = @import("peer_table.zig");
 const fed = @import("federation.zig");
-const dht_mod = @import("dht.zig");
+const dht_mod = @import("dht");
+const gateway_mod = @import("gateway");
 const storage_mod = @import("storage.zig");
 const qvl_store_mod = @import("qvl_store.zig");
 const control_mod = @import("control.zig");
@@ -70,6 +71,7 @@ pub const CapsuleNode = struct {
     peer_table: PeerTable,
     sessions: std.HashMap(std.net.Address, PeerSession, AddressContext, std.hash_map.default_max_load_percentage),
     dht: DhtService,
+    gateway: ?gateway_mod.Gateway,
     storage: *StorageService,
     qvl_store: *QvlStore,
     control_socket: std.net.Server,
@@ -104,39 +106,41 @@ pub const CapsuleNode = struct {
         std.mem.copyForwards(u8, node_id[0..4], "NODE");
 
         // Initialize Storage
-        var db_path_buf: [256]u8 = undefined;
-        const db_path = try std.fmt.bufPrint(&db_path_buf, "{s}/capsule.db", .{config.data_dir});
+        const db_path = try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, "capsule.db" });
+        defer allocator.free(db_path);
         const storage = try StorageService.init(allocator, db_path);
 
-        const qvl_db_path = try std.fmt.allocPrint(allocator, "{s}/qvl.db", .{config.data_dir});
+        const qvl_db_path = try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, "qvl.db" });
         defer allocator.free(qvl_db_path);
         const qvl_store = try QvlStore.init(allocator, qvl_db_path);
-
-        // Initialize Control Socket
-        const socket_path = config.control_socket_path;
-        // Unlink if exists (check logic in start, or here? start binds.)
 
         // Load or Generate Identity
         var seed: [32]u8 = undefined;
         var identity: SoulKey = undefined;
 
+        const identity_path = if (std.fs.path.isAbsolute(config.identity_key_path))
+            try allocator.dupe(u8, config.identity_key_path)
+        else
+            try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, std.fs.path.basename(config.identity_key_path) });
+        defer allocator.free(identity_path);
+
         // Try to open existing key file
-        if (std.fs.cwd().openFile(config.identity_key_path, .{})) |file| {
+        if (std.fs.cwd().openFile(identity_path, .{})) |file| {
             defer file.close();
             const bytes_read = try file.readAll(&seed);
             if (bytes_read != 32) {
-                std.log.err("Identity: Invalid key file size at {s}", .{config.identity_key_path});
+                std.log.err("Identity: Invalid key file size at {s}", .{identity_path});
                 return error.InvalidKeyFile;
             }
-            std.log.info("Identity: Loaded key from {s}", .{config.identity_key_path});
+            std.log.info("Identity: Loaded key from {s}", .{identity_path});
             identity = try SoulKey.fromSeed(&seed);
         } else |err| {
             if (err == error.FileNotFound) {
-                std.log.info("Identity: No key found at {s}, generating new...", .{config.identity_key_path});
+                std.log.info("Identity: No key found at {s}, generating new...", .{identity_path});
                 std.crypto.random.bytes(&seed);
 
                 // Save to file
-                const kf = try std.fs.cwd().createFile(config.identity_key_path, .{ .read = true });
+                const kf = try std.fs.cwd().createFile(identity_path, .{ .read = true });
                 defer kf.close();
                 try kf.writeAll(&seed);
 
@@ -151,6 +155,12 @@ pub const CapsuleNode = struct {
         @memcpy(&self.dht.routing_table.self_id, &identity.did);
 
         // Bind Control Socket
+        const socket_path = if (std.fs.path.isAbsolute(config.control_socket_path))
+            try allocator.dupe(u8, config.control_socket_path)
+        else
+            try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, std.fs.path.basename(config.control_socket_path) });
+        defer allocator.free(socket_path);
+
         std.fs.cwd().deleteFile(socket_path) catch {};
         const uds_address = try std.net.Address.initUnix(socket_path);
 
@@ -165,7 +175,8 @@ pub const CapsuleNode = struct {
             .discovery = discovery,
             .peer_table = PeerTable.init(allocator),
             .sessions = std.HashMap(std.net.Address, PeerSession, AddressContext, 80).init(allocator),
-            .dht = DhtService.init(allocator, node_id),
+            .dht = undefined, // Initialized below
+            .gateway = null, // Initialized below
             .storage = storage,
             .qvl_store = qvl_store,
             .control_socket = control_socket,
@@ -173,6 +184,14 @@ pub const CapsuleNode = struct {
             .running = false,
             .global_state = quarantine_mod.GlobalState{},
         };
+        // Initialize DHT in place
+        self.dht = DhtService.init(allocator, node_id);
+
+        // Initialize Gateway (now safe to reference self.dht)
+        if (config.gateway_enabled) {
+            self.gateway = gateway_mod.Gateway.init(allocator, &self.dht);
+            std.log.info("Gateway Service: ENABLED", .{});
+        }
         self.dht_timer = std.time.milliTimestamp();
         self.qvl_timer = std.time.milliTimestamp();
 
@@ -192,6 +211,7 @@ pub const CapsuleNode = struct {
         self.discovery.deinit();
         self.peer_table.deinit();
         self.sessions.deinit();
+        if (self.gateway) |*gw| gw.deinit();
         self.dht.deinit();
         self.storage.deinit();
         self.qvl_store.deinit();
@@ -260,7 +280,14 @@ pub const CapsuleNode = struct {
                         break :blk @as(usize, 0);
                     };
                     if (bytes > 0) {
-                        try self.discovery.handlePacket(&self.peer_table, m_buf[0..bytes], std.net.Address{ .any = src_addr });
+                        const addr = std.net.Address{ .any = src_addr };
+                        // Filter self-discovery
+                        if (addr.getPort() == self.config.port) {
+                            // Check local IPs if necessary, but port check is usually enough on same LAN for different nodes
+                            // For local multi-port test, we allow it if port is different.
+                            // But mDNS on host network might show our own announcement.
+                        }
+                        try self.discovery.handlePacket(&self.peer_table, m_buf[0..bytes], addr);
                     }
                 }
 
@@ -438,6 +465,18 @@ pub const CapsuleNode = struct {
                 }
                 self.allocator.free(n.nodes);
             },
+            .hole_punch_request => |req| {
+                if (self.gateway) |*gw| {
+                    _ = gw;
+                    std.log.info("Gateway: Received Hole Punch Request from {f} for {any}", .{ sender, req.target_id });
+                } else {
+                    std.log.debug("Node: Ignoring Hole Punch Request (Not a Gateway)", .{});
+                }
+            },
+            .hole_punch_notify => |notif| {
+                std.log.info("Node: Received Hole Punch Notification for peer {any} at {f}", .{ notif.peer_id, notif.address });
+                try self.connectToPeer(notif.address, [_]u8{0} ** 8);
+            },
         }
     }
 
@@ -542,6 +581,10 @@ pub const CapsuleNode = struct {
                 std.log.info("AIRLOCK: State set to {s}", .{args.state});
                 response = .{ .LockdownStatus = try self.getLockdownStatus() };
             },
+            .Topology => {
+                const topo = try self.getTopology();
+                response = .{ .TopologyInfo = topo };
+            },
         }
 
         // Send Response - buffer to ArrayList then write to stream
@@ -555,36 +598,33 @@ pub const CapsuleNode = struct {
         try conn.stream.writeAll(resp_buf.items);
     }
 
-    fn processSlashCommand(_: *CapsuleNode, args: control_mod.SlashArgs) !bool {
+    fn processSlashCommand(self: *CapsuleNode, args: control_mod.SlashArgs) !bool {
         std.log.warn("Slash: Initiated against {s} for {s}", .{ args.target_did, args.reason });
 
-        const timestamp = std.time.timestamp();
+        const timestamp: u64 = @intCast(std.time.timestamp());
+        const evidence_hash = "EVIDENCE_HASH_STUB"; // TODO: Real evidence
 
-        // TODO: Import slash types properly when module structure is fixed
-        const SlashReason = enum { BetrayalCycle, Other };
-        const SlashSeverity = enum { Quarantine, Ban };
+        // Log to persistent QVL Store (DuckDB)
+        try self.qvl_store.logSlashEvent(timestamp, args.target_did, args.reason, args.severity, evidence_hash);
 
-        const reason_enum = std.meta.stringToEnum(SlashReason, args.reason) orelse .BetrayalCycle;
-        const severity_enum = std.meta.stringToEnum(SlashSeverity, args.severity) orelse .Quarantine;
-
-        const evidence_hash: [32]u8 = [_]u8{0} ** 32;
-
-        _ = timestamp; // TODO: Use timestamp when logging is enabled
-        _ = args.target_did; // TODO: Use when logging is enabled
-
-        // TODO: Re-enable when QvlStore.logSlashEvent is implemented
-        _ = reason_enum;
-        _ = severity_enum;
-        _ = evidence_hash;
-        //try self.qvl_store.logSlashEvent(@intCast(timestamp), args.target_did, reason_enum, severity_enum, evidence_hash);
         return true;
     }
 
     fn getSlashLog(self: *CapsuleNode, limit: usize) ![]control_mod.SlashEvent {
-        _ = self;
-        _ = limit;
-        //TODO: Implement getSlashEvents when QvlStore API is stable
-        return &[_]control_mod.SlashEvent{};
+        const stored = try self.qvl_store.getSlashEvents(limit);
+        defer self.allocator.free(stored); // Free the slice, keep content
+
+        var result = try self.allocator.alloc(control_mod.SlashEvent, stored.len);
+        for (stored, 0..) |ev, i| {
+            result[i] = .{
+                .timestamp = ev.timestamp,
+                .target_did = ev.target_did,
+                .reason = ev.reason,
+                .severity = ev.severity,
+                .evidence_hash = ev.evidence_hash,
+            };
+        }
+        return result;
     }
 
     fn processBan(self: *CapsuleNode, args: control_mod.BanArgs) !bool {
@@ -649,7 +689,7 @@ pub const CapsuleNode = struct {
         return control_mod.DhtInfo{
             .local_node_id = try self.allocator.dupe(u8, &node_id_hex),
             .routing_table_size = self.dht.routing_table.buckets.len,
-            .known_nodes = 0, // TODO: Compute actual node count when RoutingTable API is stable
+            .known_nodes = self.dht.getKnownNodeCount(),
         };
     }
 
@@ -678,15 +718,57 @@ pub const CapsuleNode = struct {
         };
     }
 
+    fn getTopology(self: *CapsuleNode) !control_mod.TopologyInfo {
+        // Collect nodes: Self + Peers
+        const peer_count = self.peer_table.peers.count();
+        var nodes = try self.allocator.alloc(control_mod.GraphNode, peer_count + 1);
+        var edges = std.ArrayList(control_mod.GraphEdge){};
+
+        // 1. Add Self
+        const my_did = std.fmt.bytesToHex(&self.identity.did, .lower);
+        nodes[0] = .{
+            .id = try self.allocator.dupe(u8, my_did[0..8]), // Short DID for display
+            .trust_score = 1.0,
+            .status = "active",
+            .role = "self",
+        };
+
+        // 2. Add Peers
+        var i: usize = 1;
+        var it = self.peer_table.peers.iterator();
+        while (it.next()) |entry| : (i += 1) {
+            const peer_did = std.fmt.bytesToHex(&entry.key_ptr.*, .lower);
+            const peer_info = entry.value_ptr;
+
+            nodes[i] = .{
+                .id = try self.allocator.dupe(u8, peer_did[0..8]),
+                .trust_score = peer_info.trust_score,
+                .status = if (peer_info.trust_score < 0.2) "slashed" else "active", // Mock logic
+                .role = "peer",
+            };
+
+            // Edge from Self to Peer
+            try edges.append(self.allocator, .{
+                .source = nodes[0].id,
+                .target = nodes[i].id,
+                .weight = peer_info.trust_score,
+            });
+        }
+
+        return control_mod.TopologyInfo{
+            .nodes = nodes,
+            .edges = try edges.toOwnedSlice(self.allocator),
+        };
+    }
+
     fn getQvlMetrics(self: *CapsuleNode, args: control_mod.QvlQueryArgs) !control_mod.QvlMetrics {
         _ = args; // TODO: Use target_did for specific queries
-        _ = self;
 
         // TODO: Get actual metrics from the risk graph when API is stable
         // For now, return placeholder values
         return control_mod.QvlMetrics{
-            .total_vertices = 0,
-            .total_edges = 0,
+            .total_vertices = self.risk_graph.nodeCount(),
+            .total_edges = self.risk_graph.edgeCount(),
             .trust_rank = 0.0,
         };
     }

@@ -21,6 +21,9 @@ pub const NodeConfig = struct {
     /// Logging level
     log_level: std.log.Level = .info,
 
+    /// Enable Gateway Service (Layer 1 Coordination)
+    gateway_enabled: bool = false,
+
     /// Free allocated memory (strings, slices)
     pub fn deinit(self: *NodeConfig, allocator: std.mem.Allocator) void {
         allocator.free(self.data_dir);
@@ -39,6 +42,7 @@ pub const NodeConfig = struct {
             .control_socket_path = try allocator.dupe(u8, "data/capsule.sock"),
             .identity_key_path = try allocator.dupe(u8, "data/identity.key"),
             .port = 8710,
+            .gateway_enabled = false,
         };
     }
 
@@ -96,6 +100,7 @@ pub const NodeConfig = struct {
             .port = cfg.port,
             .bootstrap_peers = try peers.toOwnedSlice(),
             .log_level = cfg.log_level,
+            .gateway_enabled = cfg.gateway_enabled,
         };
     }
 

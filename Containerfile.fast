@@ -1,0 +1,22 @@
+FROM archlinux:latest
+
+RUN pacman -Syu --noconfirm \
+    sqlite \
+    gcc-libs \
+    bash \
+    procps
+
+WORKDIR /app
+
+# Copy built binary from host
+COPY capsule-core/zig-out/bin/capsule /usr/bin/capsule
+
+# Copy duckdb from local context
+COPY libs/libduckdb.so /usr/lib/libduckdb.so
+
+# Expose ports
+EXPOSE 9000/udp
+EXPOSE 5353/udp
+
+# Entrypoint
+CMD ["capsule", "start"]

@@ -1,0 +1,20 @@
+install
++- install capsule
+   +- compile exe capsule Debug native 1 errors
+capsule-core/src/node.zig:22:32: error: no module named 'quarantine' available within module 'root'
+const quarantine_mod = @import("quarantine");
+                               ^~~~~~~~~~~~
+referenced by:
+    node.CapsuleNode: capsule-core/src/node.zig:79:19
+    CapsuleNode: capsule-core/src/node.zig:62:25
+    6 reference(s) hidden; use '-freference-trace=8' to see all references
+error: the following command failed with 1 compilation errors:
+/usr/bin/zig build-exe -lsqlite3 -lduckdb -ODebug --dep l0_transport=lwf --dep utcp --dep l1_identity=crypto --dep qvl --dep dht -Mroot=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/capsule-core/src/main.zig -ODebug -Mlwf=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/lwf.zig -ODebug --dep ipc --dep lwf --dep entropy --dep quarantine -Mutcp=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/utcp/socket.zig -ODebug --dep shake --dep fips202_bridge --dep pqxdh --dep slash -Mcrypto=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/crypto.zig -ODebug --dep trust_graph --dep time -Mqvl=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/qvl.zig -ODebug -Mdht=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/dht.zig -ODebug -Mipc=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/ipc/client.zig -cflags -std=c99 -O3 -fPIC -DHAVE_PTHREAD -- /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/argon2.c /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/core.c /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/blake2/blake2b.c /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/thread.c /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/encoding.c /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/src/opt.c -ODebug -I /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/argon2/include -Mentropy=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/entropy.zig -ODebug -Mquarantine=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/quarantine.zig -ODebug -Mshake=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/src/crypto/shake.zig -ODebug -Mfips202_bridge=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/src/crypto/fips202_bridge.zig -needed-loqs -ODebug -I /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/liboqs/install/include -L /home/markus/zWork/_Git/Libertaria/libertaria-sdk/vendor/liboqs/install/lib -Mpqxdh=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/pqxdh.zig -ODebug -Mslash=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/slash.zig -ODebug --dep crypto -Mtrust_graph=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l1-identity/trust_graph.zig -ODebug -Mtime=/home/markus/zWork/_Git/Libertaria/libertaria-sdk/l0-transport/time.zig -lc --cache-dir .zig-cache --global-cache-dir /home/markus/.cache/zig --name capsule --zig-lib-dir /usr/lib/zig/ --listen=-
+
+Build Summary: 6/9 steps succeeded; 1 failed
+install transitive failure
++- install capsule transitive failure
+   +- compile exe capsule Debug native 1 errors
+
+error: the following build command failed with exit code 1:
+.zig-cache/o/adaac25b0555a4724eacbe0f6ad253fd/build /usr/bin/zig /usr/lib/zig /home/markus/zWork/_Git/Libertaria/libertaria-sdk .zig-cache /home/markus/.cache/zig --seed 0xbbd073e3 -Z6bc5376addff02a3 -j1
