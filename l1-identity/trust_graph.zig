@@ -12,8 +12,8 @@
 //! Memory budget: 100K nodes = 400KB (vs 6.4MB with raw DIDs)
 
 const std = @import("std");
-const soulkey = @import("soulkey.zig");
-const crypto = @import("crypto.zig");
+const soulkey = @import("soulkey");
+const crypto = @import("crypto");
 
 /// Trust visibility levels (privacy control)
 /// Per RFC-0120 S4.3.1: Alice never broadcasts her full Trust DAG

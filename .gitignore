@@ -26,6 +26,11 @@ STORIES/
 logs/
 *.log
 
+# Operational Data
+data/
+config.json
+capsule.log
+
 # Editor & OS
 .DS_Store
 .idea/

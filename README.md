@@ -3,7 +3,7 @@
 **The Core Protocol Stack for Libertaria Applications**
 
 **Version:** 1.0.0-beta ("Shield")
-**License:** TBD
+**License:** LUL-1.0
 **Status:** 🛡️ **AUTONOMOUS IMMUNE RESPONSE: OPERATIONAL** (100% Complete)
 
 ---
@@ -84,5 +84,4 @@ cargo test --test simulation_attack -- --nocapture
 ---
 
 **Mission Accomplished.**
-Markus Maiwald & Voxis Forge.
-2026.
+Markus Maiwald & Voxis Forge. 2026.

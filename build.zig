@@ -5,6 +5,15 @@ pub fn build(b: *std.Build) void {
     const optimize = b.standardOptimizeOption(.{});
 
     // ========================================================================
+    // Time Module (L0)
+    // ========================================================================
+    const time_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/time.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ========================================================================
     // L0: Transport Layer
     // ========================================================================
     const l0_mod = b.createModule(.{
@@ -145,6 +154,17 @@ pub fn build(b: *std.Build) void {
     l0_service_mod.addImport("quarantine", l0_quarantine_mod);
 
     // ========================================================================
+    // L1 Trust Graph Module (Core Dependency for QVL/PoP)
+    // ========================================================================
+    const l1_trust_graph_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/trust_graph.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    // trust_graph needs crypto types
+    l1_trust_graph_mod.addImport("crypto", l1_mod);
+
+    // ========================================================================
     // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
     // ========================================================================
     const l1_qvl_mod = b.createModule(.{
@@ -152,6 +172,28 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    l1_qvl_mod.addImport("trust_graph", l1_trust_graph_mod);
+    l1_qvl_mod.addImport("time", time_mod);
+
+    // QVL FFI (C ABI exports for L2 integration)
+    const l1_qvl_ffi_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/qvl_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_qvl_ffi_mod.addImport("qvl", l1_qvl_mod);
+    l1_qvl_ffi_mod.addImport("slash", l1_slash_mod);
+    l1_qvl_ffi_mod.addImport("time", time_mod);
+    l1_qvl_ffi_mod.addImport("trust_graph", l1_trust_graph_mod);
+
+    // QVL FFI static library (for Rust L2 Membrane Agent)
+    const qvl_ffi_lib = b.addLibrary(.{
+        .name = "qvl_ffi",
+        .root_module = l1_qvl_ffi_mod,
+        .linkage = .static,
+    });
+    qvl_ffi_lib.linkLibC();
+    b.installArtifact(qvl_ffi_lib);
 
     // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
@@ -253,18 +295,12 @@ pub fn build(b: *std.Build) void {
     const run_l0_quarantine_tests = b.addRunArtifact(l0_quarantine_tests);
 
     // Import PQXDH into main L1 module
-
     // Tests (root is test_pqxdh.zig)
     const l1_pqxdh_tests_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/test_pqxdh.zig"),
         .target = target,
         .optimize = optimize,
     });
-    // Tests import the library module 'pqxdh' (relative import works too, but module is cleaner if we use @import("pqxdh"))
-    // But test_pqxdh.zig uses @import("pqxdh.zig") which is relative file import.
-    // If we use relative import, the test module must be able to resolve pqxdh.zig.
-    // Since they are in same dir, relative import works.
-    // BUT the artifact compiled from test_pqxdh.zig needs to link liboqs because it effectively includes pqxdh.zig code.
 
     const l1_pqxdh_tests = b.addTest(.{
         .root_module = l1_pqxdh_tests_mod,
@@ -275,16 +311,6 @@ pub fn build(b: *std.Build) void {
     l1_pqxdh_tests.linkSystemLibrary("oqs");
     const run_l1_pqxdh_tests = b.addRunArtifact(l1_pqxdh_tests);
 
-    // Link time module to l1_vector_mod
-    // ========================================================================
-    // Time Module (L0)
-    // ========================================================================
-    const time_mod = b.createModule(.{
-        .root_source_file = b.path("l0-transport/time.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
     // L1 Vector tests (Phase 3C)
     const l1_vector_mod = b.createModule(.{
         .root_source_file = b.path("l1-identity/vector.zig"),
@@ -293,27 +319,7 @@ pub fn build(b: *std.Build) void {
     });
     l1_vector_mod.addImport("time", time_mod);
     l1_vector_mod.addImport("pqxdh", l1_pqxdh_mod);
-    // QVL also needs time (via proof_of_path.zig dependency)
-    l1_qvl_mod.addImport("time", time_mod);
-
-    // QVL FFI (C ABI exports for L2 integration)
-    const l1_qvl_ffi_mod = b.createModule(.{
-        .root_source_file = b.path("l1-identity/qvl_ffi.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-    l1_qvl_ffi_mod.addImport("qvl", l1_qvl_mod);
-    l1_qvl_ffi_mod.addImport("slash", l1_slash_mod);
-    l1_qvl_ffi_mod.addImport("time", time_mod);
-
-    // QVL FFI static library (for Rust L2 Membrane Agent)
-    const qvl_ffi_lib = b.addLibrary(.{
-        .name = "qvl_ffi",
-        .root_module = l1_qvl_ffi_mod,
-        .linkage = .static, // Static library
-    });
-    qvl_ffi_lib.linkLibC();
-    b.installArtifact(qvl_ffi_lib);
+    l1_vector_mod.addImport("trust_graph", l1_trust_graph_mod);
 
     const l1_vector_tests = b.addTest(.{
         .root_module = l1_vector_mod,
@@ -339,7 +345,21 @@ pub fn build(b: *std.Build) void {
     l1_vector_tests.linkLibC();
     const run_l1_vector_tests = b.addRunArtifact(l1_vector_tests);
 
-    // NOTE: Phase 3 PQXDH uses ML-KEM-768 via liboqs (integrated).
+    // L1 QVL tests
+    const l1_qvl_tests = b.addTest(.{
+        .root_module = l1_qvl_mod,
+    });
+    const run_l1_qvl_tests = b.addRunArtifact(l1_qvl_tests);
+
+    // L1 QVL FFI tests (C ABI validation)
+    const l1_qvl_ffi_tests = b.addTest(.{
+        .root_module = l1_qvl_ffi_mod,
+    });
+    l1_qvl_ffi_tests.linkLibC(); // Required for C allocator
+    const run_l1_qvl_ffi_tests = b.addRunArtifact(l1_qvl_ffi_tests);
+
+    // NOTE: C test harness (test_qvl_ffi.c) can be compiled manually:
+    // zig cc -I. l1-identity/test_qvl_ffi.c zig-out/lib/libqvl_ffi.a -o test_qvl_ffi
 
     // Test step (runs Phase 2B + 2C + 2D + 3C SDK tests)
     const test_step = b.step("test", "Run SDK tests");
@@ -357,24 +377,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_utcp_tests.step);
     test_step.dependOn(&run_opq_tests.step);
     test_step.dependOn(&run_l0_service_tests.step);
-
-    // L1 QVL tests
-    const l1_qvl_tests = b.addTest(.{
-        .root_module = l1_qvl_mod,
-    });
-    const run_l1_qvl_tests = b.addRunArtifact(l1_qvl_tests);
     test_step.dependOn(&run_l1_qvl_tests.step);
-
-    // L1 QVL FFI tests (C ABI validation)
-    const l1_qvl_ffi_tests = b.addTest(.{
-        .root_module = l1_qvl_ffi_mod,
-    });
-    l1_qvl_ffi_tests.linkLibC(); // Required for C allocator
-    const run_l1_qvl_ffi_tests = b.addRunArtifact(l1_qvl_ffi_tests);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
-
-    // NOTE: C test harness (test_qvl_ffi.c) can be compiled manually:
-    // zig cc -I. l1-identity/test_qvl_ffi.c zig-out/lib/libqvl_ffi.a -o test_qvl_ffi
 
     // ========================================================================
     // Examples
@@ -417,13 +421,44 @@ pub fn build(b: *std.Build) void {
     // Convenience Commands
     // ========================================================================
 
-    // Run LWF example
-    const run_lwf_example = b.addRunArtifact(lwf_example);
-    const run_lwf_step = b.step("run-lwf", "Run LWF frame example");
-    run_lwf_step.dependOn(&run_lwf_example.step);
-
     // Run crypto example
     const run_crypto_example = b.addRunArtifact(crypto_example);
     const run_crypto_step = b.step("run-crypto", "Run encryption example");
     run_crypto_step.dependOn(&run_crypto_example.step);
+
+    // ========================================================================
+    // Capsule Core (Phase 10) Reference Implementation
+    // ========================================================================
+    const capsule_mod = b.createModule(.{
+        .root_source_file = b.path("capsule-core/src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Link L0 (Transport)
+    capsule_mod.addImport("l0_transport", l0_mod);
+    capsule_mod.addImport("utcp", utcp_mod);
+
+    // Link L1 (Identity)
+    capsule_mod.addImport("l1_identity", l1_mod);
+    capsule_mod.addImport("qvl", l1_qvl_mod);
+
+    const capsule_exe = b.addExecutable(.{
+        .name = "capsule",
+        .root_module = capsule_mod,
+    });
+    // Link LibC (required for Argon2/OQS via L1)
+    capsule_exe.linkLibC();
+    // Link SQLite3 (required for Persistent State)
+    capsule_exe.linkSystemLibrary("sqlite3");
+
+    b.installArtifact(capsule_exe);
+
+    // Run command: zig build run -- args
+    const run_capsule = b.addRunArtifact(capsule_exe);
+    if (b.args) |args| {
+        run_capsule.addArgs(args);
+    }
+    const run_step = b.step("run", "Run the Capsule Node");
+    run_step.dependOn(&run_capsule.step);
 }

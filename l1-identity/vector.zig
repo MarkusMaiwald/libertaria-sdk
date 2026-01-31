@@ -19,9 +19,9 @@
 const std = @import("std");
 const time = @import("time");
 const proof_of_path = @import("proof_of_path.zig");
-const soulkey = @import("soulkey.zig");
+const soulkey = @import("soulkey");
 const entropy = @import("entropy.zig");
-const trust_graph = @import("trust_graph.zig");
+const trust_graph = @import("trust_graph");
 
 /// Vector Type (RFC-0120 S4.2)
 pub const VectorType = enum(u16) {

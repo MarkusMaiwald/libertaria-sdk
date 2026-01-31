@@ -11,7 +11,7 @@
 const std = @import("std");
 const qvl = @import("qvl.zig");
 const pop_mod = @import("proof_of_path.zig");
-const trust_graph = @import("trust_graph.zig");
+const trust_graph = @import("trust_graph");
 const time = @import("time");
 const slash = @import("slash");
 
