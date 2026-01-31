@@ -261,6 +261,24 @@ export fn qvl_revoke_trust_edge(
     return -2; // Not found
 }
 
+/// Get DID for a given node ID
+/// writes 32 bytes to out_did
+/// returns true on success
+export fn qvl_get_did(
+    ctx: ?*QvlContext,
+    node_id: u32,
+    out_did: [*c]u8,
+) callconv(.c) bool {
+    const context = ctx orelse return false;
+    if (out_did == null) return false;
+
+    if (context.trust_graph.getDid(node_id)) |did| {
+        @memcpy(out_did[0..32], &did);
+        return true;
+    }
+    return false;
+}
+
 /// Issue a SlashSignal for a detected betrayal
 /// Returns 0 on success, < 0 on error
 /// If 'out_signal' is non-null, writes serialized signal (82 bytes)
@@ -279,10 +297,11 @@ export fn qvl_issue_slash_signal(
     const signal = slash.SlashSignal{
         .target_did = did,
         .reason = @enumFromInt(reason),
-        .punishment = .Quarantine, // Default to Quarantine
+        .severity = .Quarantine, // Default to Quarantine
         .evidence_hash = [_]u8{0} ** 32, // TODO: Hash actual evidence
-        .timestamp = std.time.timestamp(),
-        .nonce = 0,
+        .timestamp = @intCast(std.time.timestamp()),
+        .duration_seconds = 86400, // 24 hours
+        .entropy_stamp = 0, // Placeholder
     };
 
     if (out_signal != null) {

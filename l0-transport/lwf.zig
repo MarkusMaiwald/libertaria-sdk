@@ -51,10 +51,21 @@ pub const LWFFlags = struct {
 
 /// RFC-0000 Section 4.2: LWF Header (72 bytes fixed)
 pub const LWFHeader = struct {
+    pub const VERSION: u8 = 0x01;
+    pub const SIZE: usize = 72;
+
+    // RFC-0121: Service Types
+    pub const ServiceType = struct {
+        pub const DATA_TRANSPORT: u16 = 0x0001;
+        pub const SLASH_PROTOCOL: u16 = 0x0002;
+        pub const IDENTITY_SIGNAL: u16 = 0x0003;
+        pub const ECONOMIC_SETTLEMENT: u16 = 0x0004;
+    };
+
     magic: [4]u8, // "LWF\0"
     version: u8, // 0x01
     flags: u8, // Bitfield (see LWFFlags)
-    service_type: u16, // Big-endian, 0x0A00-0x0AFF for Feed
+    service_type: u16, // See ServiceType constants
     source_hint: [24]u8, // Blake3 truncated DID hint (192-bit)
     dest_hint: [24]u8, // Blake3 truncated DID hint (192-bit)
     sequence: u32, // Big-endian, anti-replay counter
@@ -62,8 +73,6 @@ pub const LWFHeader = struct {
     payload_len: u16, // Big-endian, actual payload size
     entropy_difficulty: u8, // Entropy Stamp difficulty (0-255)
     frame_class: u8, // FrameClass enum value
-
-    pub const SIZE: usize = 72;
 
     /// Initialize header with default values
     pub fn init() LWFHeader {

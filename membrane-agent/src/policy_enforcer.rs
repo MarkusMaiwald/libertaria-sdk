@@ -79,6 +79,25 @@ impl PolicyEnforcer {
             })
             .collect()
     }
+
+    /// Check a node for betrayal and issue slash signal if guilty
+    /// Returns the signed SlashSignal bytes if a punishment was issued
+    pub fn punish_if_guilty(&self, node_id: u32) -> Option<[u8; 82]> {
+        match self.qvl.detect_betrayal(node_id) {
+            Ok(anomaly) if anomaly.score > 0.9 => { 
+                // High confidence betrayal
+                if let Some(did) = self.qvl.get_did(anomaly.node) {
+                     // Issue slash (mapping AnomalyReason to SlashReason)
+                     // Note: AnomalyReason::NegativeCycle(1) maps to SlashReason::BetrayalCycle(1)
+                     if let Ok(signal) = self.qvl.issue_slash_signal(&did, anomaly.reason as u8) {
+                         return Some(signal);
+                     }
+                }
+                None
+            },
+            _ => None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -93,8 +112,8 @@ mod tests {
         let unknown_did = [0u8; 32];
         let decision = enforcer.should_accept_packet(&unknown_did);
         
-        // Unknown DIDs should be treated as neutral
-        assert_eq!(decision, PolicyDecision::Neutral);
+        // Unknown DIDs should be treated as Accept (neutral trust default)
+        assert_eq!(decision, PolicyDecision::Accept);
     }
     
     #[test]

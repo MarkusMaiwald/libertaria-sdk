@@ -84,6 +84,12 @@ extern "C" {
         to: u32,
     ) -> c_int;
 
+    fn qvl_get_did(
+        ctx: *mut QvlContext,
+        node_id: u32,
+        out_did: *mut u8,
+    ) -> bool;
+
     fn qvl_issue_slash_signal(
         ctx: *mut QvlContext,
         target_did: *const u8,
@@ -266,6 +272,24 @@ impl QvlClient {
             Ok(())
         } else {
             Err(QvlError::MutationFailed)
+        }
+    }
+
+    /// Get DID for a node ID
+    pub fn get_did(&self, node_id: u32) -> Option<[u8; 32]> {
+        if self.ctx.is_null() {
+            return None;
+        }
+
+        let mut out = [0u8; 32];
+        let result = unsafe {
+            qvl_get_did(self.ctx, node_id, out.as_mut_ptr())
+        };
+
+        if result {
+            Some(out)
+        } else {
+            None
         }
     }
 
