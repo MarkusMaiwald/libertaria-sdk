@@ -120,6 +120,15 @@ pub fn build(b: *std.Build) void {
     l1_did_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     // ========================================================================
+    // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
+    // ========================================================================
+    const l1_qvl_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/qvl.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
     // ========================================================================
 
@@ -287,6 +296,13 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_utcp_tests.step);
     test_step.dependOn(&run_opq_tests.step);
     test_step.dependOn(&run_l0_service_tests.step);
+
+    // L1 QVL tests
+    const l1_qvl_tests = b.addTest(.{
+        .root_module = l1_qvl_mod,
+    });
+    const run_l1_qvl_tests = b.addRunArtifact(l1_qvl_tests);
+    test_step.dependOn(&run_l1_qvl_tests.step);
 
     // ========================================================================
     // Examples

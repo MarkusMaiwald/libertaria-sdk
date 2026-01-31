@@ -109,6 +109,16 @@ The Libertaria L0-L1 SDK in Zig is **reaching maturity with 50% scope complete**
 - **Estimated:** 3 weeks
 - **Next Task Block**
 
+### Phase 4B: L1 QVL Advanced Graph Engine (RFC-0120)
+- ✅ Core types: `RiskGraph`, `RiskEdge`, `AnomalyScore`
+- ✅ Bellman-Ford betrayal detection (negative-cycle hunter)
+- ✅ A* trust pathfinding with reputation heuristic
+- ✅ Aleph-style gossip (probabilistic flooding, coverage tracking)
+- ✅ Loopy Belief Propagation (edge inference, probabilistic betrayal)
+- ⏳ POMCP integration (conditional: spike after BP validation)
+- ⏳ Integration with Proof-of-Path (reputation scoring)
+- **Status:** CORE ALGORITHMS COMPLETE, 16 tests passing
+
 ### Phase 5: FFI & Rust Integration Boundary
 - ⏳ C ABI exports for all L1 operations
   - soulkey_generate(), soulkey_sign()
