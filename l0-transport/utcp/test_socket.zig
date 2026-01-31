@@ -6,12 +6,12 @@ test "UTCP socket init and loopback" {
     const allocator = std.testing.allocator;
     const addr = try std.net.Address.parseIp("127.0.0.1", 0); // Port 0 for ephemeral
 
-    var server = try socket.UTCP.init(addr);
+    var server = try socket.UTCP.init(allocator, addr);
     defer server.deinit();
 
     const server_addr = try server.getLocalAddress();
 
-    var client = try socket.UTCP.init(try std.net.Address.parseIp("127.0.0.1", 0));
+    var client = try socket.UTCP.init(allocator, try std.net.Address.parseIp("127.0.0.1", 0));
     defer client.deinit();
 
     // 1. Prepare frame

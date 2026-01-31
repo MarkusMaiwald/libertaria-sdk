@@ -16,7 +16,7 @@ pub const L0Service = struct {
     pub fn init(allocator: std.mem.Allocator, address: std.net.Address, base_dir: []const u8, persona: opq.Persona, resolver: opq.trust_resolver.TrustResolver) !L0Service {
         return L0Service{
             .allocator = allocator,
-            .socket = try utcp.UTCP.init(address),
+            .socket = try utcp.UTCP.init(allocator, address),
             .opq_manager = try opq.OPQManager.init(allocator, base_dir, persona, resolver),
         };
     }
@@ -65,7 +65,7 @@ test "L0 Integrated Service: Loopback Ingestion" {
     const service_addr = try service.socket.getLocalAddress();
 
     // 2. Prepare client socket and frame
-    var client = try utcp.UTCP.init(try std.net.Address.parseIp("127.0.0.1", 0));
+    var client = try utcp.UTCP.init(std.testing.allocator, try std.net.Address.parseIp("127.0.0.1", 0));
     defer client.deinit();
 
     var frame = try lwf.LWFFrame.init(allocator, 100);

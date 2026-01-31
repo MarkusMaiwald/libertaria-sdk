@@ -12,11 +12,18 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    const ipc_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/ipc/client.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const utcp_mod = b.createModule(.{
         .root_source_file = b.path("l0-transport/utcp/socket.zig"),
         .target = target,
         .optimize = optimize,
     });
+    utcp_mod.addImport("ipc", ipc_mod);
     utcp_mod.addImport("lwf", l0_mod);
 
     const opq_mod = b.createModule(.{

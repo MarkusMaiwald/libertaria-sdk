@@ -3,14 +3,16 @@
 const std = @import("std");
 const lwf = @import("lwf");
 const entropy = @import("entropy");
+const ipc = @import("ipc");
 const posix = std.posix;
 
 /// UTCP Socket abstraction for sending and receiving LWF frames
 pub const UTCP = struct {
     fd: posix.socket_t,
+    ipc_client: ipc.IpcClient,
 
     /// Initialize UTCP socket by binding to an address
-    pub fn init(address: std.net.Address) !UTCP {
+    pub fn init(allocator: std.mem.Allocator, address: std.net.Address) !UTCP {
         const fd = try posix.socket(
             address.any.family,
             posix.SOCK.DGRAM | posix.SOCK.CLOEXEC,
@@ -20,13 +22,18 @@ pub const UTCP = struct {
 
         try posix.bind(fd, &address.any, address.getOsSockLen());
 
+        // Initialize IPC client (connects on first use)
+        const ipc_client = ipc.IpcClient.init(allocator, "/tmp/libertaria_l0.sock");
+
         return UTCP{
             .fd = fd,
+            .ipc_client = ipc_client,
         };
     }
 
     /// Close the socket
     pub fn deinit(self: *UTCP) void {
+        self.ipc_client.deinit();
         posix.close(self.fd);
     }
 
@@ -96,6 +103,18 @@ pub const UTCP = struct {
         // 3. Decode the rest (Allocates payload)
         const frame = try lwf.LWFFrame.decode(allocator, data);
 
+        // 4. Hook: Send event to L2 Membrane Agent
+        // TODO: Extract real DID from frame signature/header
+        const placeholder_did = [_]u8{0} ** 32;
+        self.ipc_client.sendPacketReceived(
+            placeholder_did,
+            @truncate(frame.header.service_type),
+            @intCast(frame.payload.len),
+        ) catch {
+            // Log but don't fail transport?
+            // std.debug.print("IPC Send Failed: {}\n", .{err});
+        };
+
         return ReceiveResult{
             .frame = frame,
             .sender = std.net.Address{ .any = src_addr },
@@ -119,12 +138,12 @@ test "UTCP socket init and loopback" {
     const allocator = std.testing.allocator;
     const addr = try std.net.Address.parseIp("127.0.0.1", 0); // Port 0 for ephemeral
 
-    var server = try UTCP.init(addr);
+    var server = try UTCP.init(allocator, addr);
     defer server.deinit();
 
     const server_addr = try server.getLocalAddress();
 
-    var client = try UTCP.init(try std.net.Address.parseIp("127.0.0.1", 0));
+    var client = try UTCP.init(allocator, try std.net.Address.parseIp("127.0.0.1", 0));
     defer client.deinit();
 
     // 1. Prepare frame
@@ -152,11 +171,11 @@ test "UTCP socket DoS defense: invalid entropy stamp" {
     const allocator = std.testing.allocator;
     const addr = try std.net.Address.parseIp("127.0.0.1", 0);
 
-    var server = try UTCP.init(addr);
+    var server = try UTCP.init(allocator, addr);
     defer server.deinit();
     const server_addr = try server.getLocalAddress();
 
-    var client = try UTCP.init(try std.net.Address.parseIp("127.0.0.1", 0));
+    var client = try UTCP.init(allocator, try std.net.Address.parseIp("127.0.0.1", 0));
     defer client.deinit();
 
     // 1. Prepare frame with HAS_ENTROPY but garbage stamp
