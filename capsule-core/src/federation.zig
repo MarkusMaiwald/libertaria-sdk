@@ -5,7 +5,7 @@ const std = @import("std");
 const net = std.net;
 const lwf = @import("l0_transport");
 
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 pub const SERVICE_TYPE: u16 = lwf.LWFHeader.ServiceType.IDENTITY_SIGNAL;
 
 pub const DhtNode = struct {
