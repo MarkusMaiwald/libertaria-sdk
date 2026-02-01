@@ -7,8 +7,7 @@ const l0 = @import("l0_transport");
 // access UTCP from l0 or utcp module directly
 // build.zig imports "utcp" into capsule
 const utcp_mod = @import("utcp");
-// l1_identity module
-const l1 = @import("l1_identity");
+const soulkey_mod = @import("soulkey");
 // qvl module
 const qvl = @import("qvl");
 
@@ -19,15 +18,16 @@ const dht_mod = @import("dht");
 const gateway_mod = @import("gateway");
 const storage_mod = @import("storage.zig");
 const qvl_store_mod = @import("qvl_store.zig");
-const control_mod = @import("control.zig");
+const control_mod = @import("control");
 const quarantine_mod = @import("quarantine");
 const circuit_mod = @import("circuit.zig");
 const relay_service_mod = @import("relay_service.zig");
+const policy_mod = @import("policy");
 
 const NodeConfig = config_mod.NodeConfig;
 const UTCP = utcp_mod.UTCP;
-// SoulKey definition (temporarily embedded until module is available)
-const SoulKey = l1.SoulKey;
+// SoulKey definition
+const SoulKey = soulkey_mod.SoulKey;
 const RiskGraph = qvl.types.RiskGraph;
 const DiscoveryService = discovery_mod.DiscoveryService;
 const PeerTable = peer_table_mod.PeerTable;
@@ -64,6 +64,9 @@ pub const CapsuleNode = struct {
     gateway: ?gateway_mod.Gateway,
     relay_service: ?relay_service_mod.RelayService,
     circuit_builder: ?circuit_mod.CircuitBuilder,
+    policy_engine: policy_mod.PolicyEngine,
+    thread_pool: std.Thread.Pool,
+    state_mutex: std.Thread.Mutex,
     storage: *StorageService,
     qvl_store: *QvlStore,
     control_socket: std.net.Server,
@@ -76,6 +79,10 @@ pub const CapsuleNode = struct {
 
     pub fn init(allocator: std.mem.Allocator, config: NodeConfig) !*CapsuleNode {
         const self = try allocator.create(CapsuleNode);
+
+        // Initialize Thread Pool
+        var thread_pool: std.Thread.Pool = undefined;
+        try thread_pool.init(.{ .allocator = allocator });
 
         // Ensure data directory exists
         std.fs.cwd().makePath(config.data_dir) catch |err| {
@@ -96,6 +103,9 @@ pub const CapsuleNode = struct {
         var node_id: dht_mod.NodeId = [_]u8{0} ** 32;
         // TODO: Generate real NodeID from Public Key
         std.mem.copyForwards(u8, node_id[0..4], "NODE");
+
+        // Initialize Policy Engine
+        const policy_engine = policy_mod.PolicyEngine.init(allocator);
 
         // Initialize Storage
         const db_path = try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, "capsule.db" });
@@ -171,6 +181,9 @@ pub const CapsuleNode = struct {
             .gateway = null, // Initialized below
             .relay_service = null, // Initialized below
             .circuit_builder = null, // Initialized below
+            .policy_engine = policy_engine,
+            .thread_pool = thread_pool,
+            .state_mutex = .{},
             .storage = storage,
             .qvl_store = qvl_store,
             .control_socket = control_socket,
@@ -232,7 +245,78 @@ pub const CapsuleNode = struct {
         self.control_socket.deinit();
         // Clean up socket file
         std.fs.cwd().deleteFile(self.config.control_socket_path) catch {};
+        self.thread_pool.deinit();
         self.allocator.destroy(self);
+    }
+
+    fn processFrame(self: *CapsuleNode, frame: l0.LWFFrame, sender: std.net.Address) void {
+        var f = frame;
+        defer f.deinit(self.allocator);
+
+        // L2 MEMBRANE: Policy Check (Unlocked - CPU Heavy)
+        const decision = self.policy_engine.decide(&f.header);
+        if (decision == .drop) {
+            std.log.info("Policy: Dropped frame from {f}", .{sender});
+            return;
+        }
+
+        switch (f.header.service_type) {
+            l0.LWFHeader.ServiceType.RELAY_FORWARD => {
+                if (self.relay_service) |*rs| {
+                    // Unwrap (Unlocked)
+                    // Unwrap (Locked - protects Sessions Map)
+                    self.state_mutex.lock();
+                    const result = rs.forwardPacket(f.payload, self.identity.x25519_private);
+                    self.state_mutex.unlock();
+
+                    if (result) |next_hop_data| {
+                        defer self.allocator.free(next_hop_data.payload);
+
+                        const next_node_id = next_hop_data.next_hop;
+                        var is_final = true;
+                        for (next_node_id) |b| {
+                            if (b != 0) {
+                                is_final = false;
+                                break;
+                            }
+                        }
+
+                        if (is_final) {
+                            std.log.info("Relay: Final Packet Received for Session {x}! Size: {d}", .{ next_hop_data.session_id, next_hop_data.payload.len });
+                        } else {
+                            // DHT Lookup (Locked)
+                            self.state_mutex.lock();
+                            const next_remote = self.dht.routing_table.findNode(next_node_id);
+                            self.state_mutex.unlock();
+
+                            if (next_remote) |remote| {
+                                var relay_frame = l0.LWFFrame.init(self.allocator, next_hop_data.payload.len) catch return;
+                                defer relay_frame.deinit(self.allocator);
+                                @memcpy(relay_frame.payload, next_hop_data.payload);
+                                relay_frame.header.service_type = l0.LWFHeader.ServiceType.RELAY_FORWARD;
+
+                                self.utcp.sendFrame(remote.address, &relay_frame, self.allocator) catch |err| {
+                                    std.log.warn("Relay Send Error: {}", .{err});
+                                };
+                                std.log.info("Relay: Forwarded packet to {f}", .{remote.address});
+                            } else {
+                                std.log.warn("Relay: Next hop {x} not found", .{next_node_id[0..4]});
+                            }
+                        }
+                    } else |err| {
+                        std.log.warn("Relay Forward Error: {}", .{err});
+                    }
+                }
+            },
+            fed.SERVICE_TYPE => {
+                self.state_mutex.lock();
+                defer self.state_mutex.unlock();
+                self.handleFederationMessage(sender, f) catch |err| {
+                    std.log.warn("Federation Error: {}", .{err});
+                };
+            },
+            else => {},
+        }
     }
 
     pub fn start(self: *CapsuleNode) !void {
@@ -273,59 +357,12 @@ pub const CapsuleNode = struct {
                 if (poll_fds[0].revents & std.posix.POLL.IN != 0) {
                     var buf: [1500]u8 = undefined;
                     if (self.utcp.receiveFrame(self.allocator, &buf)) |result| {
-                        var frame = result.frame;
-                        defer frame.deinit(self.allocator);
-
-                        if (frame.header.service_type == fed.SERVICE_TYPE) {
-                            try self.handleFederationMessage(result.sender, frame);
-                            // Phase 14: Relay Forwarding
-                            if (self.relay_service) |*rs| {
-                                std.log.debug("Relay: Received relay packet from {f}", .{result.sender});
-
-                                // Unwrap and forward using our private key (as receiver)
-                                if (rs.forwardPacket(frame.payload, self.identity.x25519_private)) |next_hop_data| {
-                                    // next_hop_data.payload is now the INNER payload
-                                    const next_node_id = next_hop_data.next_hop;
-
-                                    // Resolve next hop address
-                                    // TODO: Check if we are final destination (all zeros) handled by forwardPacket
-                                    // But forwardPacket returns the result to US to send.
-
-                                    // Check if we are destination handled by forwardPacket via null next_hop logic?
-                                    // forwardPacket returns next_hop. If all zeros, it means LOCAL delivery.
-                                    var is_final = true;
-                                    for (next_node_id) |b| {
-                                        if (b != 0) {
-                                            is_final = false;
-                                            break;
-                                        }
-                                    }
-
-                                    if (is_final) {
-                                        // Final delivery to US
-                                        std.log.info("Relay: Final Packet Received for Session {x}! Payload Size: {d}", .{ next_hop_data.session_id, next_hop_data.payload.len });
-                                        // TODO: Hand over payload to upper layers (e.g. Chat/Protocol handler)
-                                        // For MVP, just log.
-                                    } else {
-                                        // Forward to next hop
-                                        // Lookup IP
-                                        const next_remote = self.dht.routing_table.findNode(next_node_id);
-                                        if (next_remote) |remote| {
-                                            // Re-wrap in LWF for transport
-                                            try self.utcp.send(remote.address, next_hop_data.payload, l0.LWFHeader.ServiceType.RELAY_FORWARD);
-                                            std.log.info("Relay: Forwarded packet to {f} (Session {x})", .{ remote.address, next_hop_data.session_id });
-                                        } else {
-                                            std.log.warn("Relay: Next hop {x} not found in routing table", .{next_node_id[0..4]});
-                                        }
-                                    }
-                                    self.allocator.free(next_hop_data.payload);
-                                } else |err| {
-                                    std.log.warn("Relay: Failed to forward packet: {}", .{err});
-                                }
-                            } else {
-                                std.log.debug("Relay: Received relay packet but relay_service is disabled.", .{});
-                            }
-                        }
+                        self.thread_pool.spawn(processFrame, .{ self, result.frame, result.sender }) catch |err| {
+                            std.log.warn("Failed to spawn worker: {}", .{err});
+                            // Fallback: Free resource
+                            var f = result.frame;
+                            f.deinit(self.allocator);
+                        };
                     } else |err| {
                         if (err != error.WouldBlock) std.log.warn("UTCP receive error: {}", .{err});
                     }
@@ -348,6 +385,8 @@ pub const CapsuleNode = struct {
                             // For local multi-port test, we allow it if port is different.
                             // But mDNS on host network might show our own announcement.
                         }
+                        self.state_mutex.lock();
+                        defer self.state_mutex.unlock();
                         try self.discovery.handlePacket(&self.peer_table, m_buf[0..bytes], addr);
                     }
                 }
@@ -360,21 +399,27 @@ pub const CapsuleNode = struct {
                     };
                     defer conn.stream.close();
 
+                    self.state_mutex.lock();
                     self.handleControlConnection(conn) catch |err| {
                         std.log.warn("Control handle error: {}", .{err});
                     };
+                    self.state_mutex.unlock();
                 }
             }
 
             // 3. Periodic Ticks
             const now = std.time.milliTimestamp();
             if (now - last_tick >= TICK_MS) {
+                self.state_mutex.lock();
                 try self.tick();
+                self.state_mutex.unlock();
                 last_tick = now;
 
                 // Discovery cycle (every ~5s)
                 discovery_timer += 1;
                 if (discovery_timer >= 50) {
+                    self.state_mutex.lock();
+                    defer self.state_mutex.unlock();
                     self.discovery.announce() catch {};
                     self.discovery.query() catch {};
                     discovery_timer = 0;
@@ -505,7 +550,7 @@ pub const CapsuleNode = struct {
                 // Convert to federation nodes
                 var nodes = try self.allocator.alloc(fed.DhtNode, closest.len);
                 for (closest, 0..) |node, i| {
-                    nodes[i] = .{ .id = node.id, .address = node.address };
+                    nodes[i] = .{ .id = node.id, .address = node.address, .key = [_]u8{0} ** 32 };
                 }
 
                 try self.sendFederationMessage(sender, .{
@@ -560,18 +605,20 @@ pub const CapsuleNode = struct {
 
         switch (cmd) {
             .Status => {
+                const my_did_hex = std.fmt.bytesToHex(&self.identity.did, .lower);
                 response = .{
                     .NodeStatus = .{
-                        .node_id = "NODE_ID_STUB",
+                        .node_id = try self.allocator.dupe(u8, my_did_hex[0..12]),
                         .state = if (self.running) "Running" else "Stopping",
                         .peers_count = self.peer_table.peers.count(),
                         .uptime_seconds = 0, // TODO: Track start time
-                        .version = "0.1.0",
+                        .version = try self.allocator.dupe(u8, "0.15.2-voxis"),
                     },
                 };
             },
             .Peers => {
-                response = .{ .Ok = "Peer listing not yet fully implemented in CLI JSON" };
+                const peers = try self.getPeerList();
+                response = .{ .PeerList = peers };
             },
             .Sessions => {
                 const sessions = try self.getSessions();
@@ -604,6 +651,10 @@ pub const CapsuleNode = struct {
             .SlashLog => |args| {
                 const logs = try self.getSlashLog(args.limit);
                 response = .{ .SlashLogResult = logs };
+            },
+            .Topology => {
+                const topo = try self.getTopology();
+                response = .{ .TopologyInfo = topo };
             },
             .Ban => |args| {
                 if (try self.processBan(args)) {
@@ -641,10 +692,6 @@ pub const CapsuleNode = struct {
                 self.global_state.setAirlock(state);
                 std.log.info("AIRLOCK: State set to {s}", .{args.state});
                 response = .{ .LockdownStatus = try self.getLockdownStatus() };
-            },
-            .Topology => {
-                const topo = try self.getTopology();
-                response = .{ .TopologyInfo = topo };
             },
             .RelayControl => |args| {
                 if (args.enable) {
@@ -699,7 +746,12 @@ pub const CapsuleNode = struct {
                         const encoded = try packet.encode(self.allocator);
                         defer self.allocator.free(encoded);
 
-                        try self.utcp.send(first_hop, encoded, l0.LWFHeader.ServiceType.RELAY_FORWARD);
+                        var frame = try l0.LWFFrame.init(self.allocator, encoded.len);
+                        defer frame.deinit(self.allocator);
+                        @memcpy(frame.payload, encoded);
+                        frame.header.service_type = l0.LWFHeader.ServiceType.RELAY_FORWARD;
+
+                        try self.utcp.sendFrame(first_hop, &frame, self.allocator);
                         response = .{ .Ok = "Packet sent via Relay" };
                     } else |err| {
                         std.log.warn("RelaySend failed: {}", .{err});
@@ -818,14 +870,12 @@ pub const CapsuleNode = struct {
     }
 
     fn getIdentityInfo(self: *CapsuleNode) !control_mod.IdentityInfo {
-        const did_hex = std.fmt.bytesToHex(&self.identity.did, .lower);
-        const pubkey_hex = std.fmt.bytesToHex(&self.identity.public_key, .lower);
-        const dht_id_hex = std.fmt.bytesToHex(&self.dht.routing_table.self_id, .lower);
-
+        const did_str = std.fmt.bytesToHex(&self.identity.did, .lower);
+        const pub_key_hex = std.fmt.bytesToHex(&self.identity.ed25519_public, .lower);
         return control_mod.IdentityInfo{
-            .did = try self.allocator.dupe(u8, &did_hex),
-            .public_key = try self.allocator.dupe(u8, &pubkey_hex),
-            .dht_node_id = try self.allocator.dupe(u8, &dht_id_hex),
+            .did = try self.allocator.dupe(u8, &did_str),
+            .public_key = try self.allocator.dupe(u8, &pub_key_hex),
+            .dht_node_id = try self.allocator.dupe(u8, "00000000"), // TODO
         };
     }
 
@@ -883,6 +933,24 @@ pub const CapsuleNode = struct {
             .nodes = nodes,
             .edges = try edges.toOwnedSlice(self.allocator),
         };
+    }
+
+    fn getPeerList(self: *CapsuleNode) ![]control_mod.PeerInfo {
+        const count = self.peer_table.peers.count();
+        var list = try self.allocator.alloc(control_mod.PeerInfo, count);
+        var i: usize = 0;
+        var it = self.peer_table.peers.iterator();
+        while (it.next()) |entry| : (i += 1) {
+            const peer_did = std.fmt.bytesToHex(&entry.key_ptr.*, .lower);
+            const peer = entry.value_ptr;
+            list[i] = .{
+                .id = try self.allocator.dupe(u8, peer_did[0..8]),
+                .address = try std.fmt.allocPrint(self.allocator, "{any}", .{peer.address}),
+                .state = if (peer.is_active) "Active" else "Inactive",
+                .last_seen = peer.last_seen,
+            };
+        }
+        return list;
     }
 
     fn getQvlMetrics(self: *CapsuleNode, args: control_mod.QvlQueryArgs) !control_mod.QvlMetrics {

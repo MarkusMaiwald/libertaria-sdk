@@ -10,10 +10,10 @@ pub const NodeConfig = struct {
     port: u16 = 8710,
 
     /// Control Socket Path (Unix Domain Socket)
-    control_socket_path: []const u8,
+    control_socket_path: []const u8 = "",
 
     /// Identity Key Path (Ed25519 private key)
-    identity_key_path: []const u8,
+    identity_key_path: []const u8 = "",
 
     /// Bootstrap peers (multiaddrs)
     bootstrap_peers: [][]const u8 = &.{},

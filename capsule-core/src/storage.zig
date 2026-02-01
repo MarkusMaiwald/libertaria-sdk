@@ -89,7 +89,10 @@ pub const StorageService = struct {
             "ON CONFLICT(id) DO UPDATE SET address=excluded.address, last_seen=excluded.last_seen, seen_count=seen_count+1, x25519_key=excluded.x25519_key;";
 
         var stmt: ?*c.sqlite3_stmt = null;
-        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) {
+            std.log.err("SQLite: Prepare failed for savePeer: {s}", .{c.sqlite3_errmsg(self.db)});
+            return error.PrepareFailed;
+        }
         defer _ = c.sqlite3_finalize(stmt);
 
         // Bind ID
@@ -112,7 +115,10 @@ pub const StorageService = struct {
     pub fn loadPeers(self: *StorageService, allocator: std.mem.Allocator) ![]RemoteNode {
         const sql = "SELECT id, address, last_seen, x25519_key FROM peers;";
         var stmt: ?*c.sqlite3_stmt = null;
-        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) return error.PrepareFailed;
+        if (c.sqlite3_prepare_v2(self.db, sql, -1, &stmt, null) != c.SQLITE_OK) {
+            std.log.err("SQLite: Prepare failed for loadPeers: {s}", .{c.sqlite3_errmsg(self.db)});
+            return error.PrepareFailed;
+        }
         defer _ = c.sqlite3_finalize(stmt);
 
         var list = std.ArrayList(RemoteNode){};

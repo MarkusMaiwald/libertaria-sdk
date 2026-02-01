@@ -4,6 +4,10 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    // Dependencies
+    const vaxis_dep = b.dependency("vaxis", .{});
+    const vaxis_mod = vaxis_dep.module("vaxis");
+
     // ========================================================================
     // Time Module (L0)
     // ========================================================================
@@ -75,6 +79,13 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+
+    const l2_policy_mod = b.createModule(.{
+        .root_source_file = b.path("l2-membrane/policy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l2_policy_mod.addImport("lwf", l0_mod);
 
     // ========================================================================
     // Crypto: SHA3/SHAKE & FIPS 202
@@ -247,6 +258,12 @@ pub fn build(b: *std.Build) void {
         .root_module = utcp_mod,
     });
     const run_utcp_tests = b.addRunArtifact(utcp_tests);
+
+    // L2 Policy tests
+    const l2_policy_tests = b.addTest(.{
+        .root_module = l2_policy_mod,
+    });
+    const run_l2_policy_tests = b.addRunArtifact(l2_policy_tests);
 
     // OPQ tests
     const opq_tests = b.addTest(.{
@@ -433,6 +450,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_bridge_tests.step);
     test_step.dependOn(&run_l1_qvl_tests.step);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
+    test_step.dependOn(&run_l2_policy_tests.step);
 
     // ========================================================================
     // Examples
@@ -483,6 +501,13 @@ pub fn build(b: *std.Build) void {
     // ========================================================================
     // Capsule Core (Phase 10) Reference Implementation
     // ========================================================================
+    const capsule_control_mod = b.createModule(.{
+        .root_source_file = b.path("capsule-core/src/control.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    capsule_control_mod.addImport("qvl", l1_qvl_mod);
+
     const capsule_mod = b.createModule(.{
         .root_source_file = b.path("capsule-core/src/main.zig"),
         .target = target,
@@ -500,6 +525,10 @@ pub fn build(b: *std.Build) void {
     capsule_mod.addImport("gateway", gateway_mod);
     capsule_mod.addImport("relay", relay_mod);
     capsule_mod.addImport("quarantine", l0_quarantine_mod);
+    capsule_mod.addImport("policy", l2_policy_mod);
+    capsule_mod.addImport("soulkey", l1_soulkey_mod);
+    capsule_mod.addImport("vaxis", vaxis_mod);
+    capsule_mod.addImport("control", capsule_control_mod);
 
     const capsule_exe = b.addExecutable(.{
         .name = "capsule",

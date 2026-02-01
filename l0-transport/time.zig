@@ -30,6 +30,34 @@ pub const MAX_FUTURE_AS: u128 = 3630 * ATTOSECONDS_PER_SECOND;
 pub const MAX_AGE_AS: u128 = 30 * 24 * 3600 * ATTOSECONDS_PER_SECOND;
 
 // ============================================================================
+// STANDARD EPOCHS (RFC-0106)
+// ============================================================================
+
+/// Human-Centric Epoch: 1 Day (24 hours) - The diurnal cycle
+pub const HUMAN_EPOCH: u128 = 24 * 3600 * ATTOSECONDS_PER_SECOND;
+
+/// Network/Router Epoch: 12 minutes (720 seconds) - Optimal NAT refresh cycle
+pub const ROUTER_EPOCH: u128 = 720 * ATTOSECONDS_PER_SECOND;
+
+/// Satellite Epoch: 1 week (7 days)
+pub const SATELLITE_EPOCH: u128 = 604_800 * ATTOSECONDS_PER_SECOND;
+
+/// Heartbeat Epoch: 1 minute (60 seconds) - The system pulse
+pub const HEARTBEAT_EPOCH: u128 = 60 * ATTOSECONDS_PER_SECOND;
+
+/// Daily Epoch: 24 hours (Alias for Human Epoch)
+pub const DAILY_EPOCH: u128 = HUMAN_EPOCH;
+
+/// Millennium Epoch: 1000 years
+pub const MILLENNIUM_EPOCH: u128 = 1000 * 365 * DAILY_EPOCH;
+
+/// Collider Epoch: 1 attosecond
+pub const COLLIDER_EPOCH: u128 = 1;
+
+/// Nano Epoch: 1 nanosecond
+pub const NANO_EPOCH: u128 = 1_000_000_000;
+
+// ============================================================================
 // ANCHOR EPOCH
 // ============================================================================
 

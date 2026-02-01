@@ -10,12 +10,21 @@ const QvlStore = @import("qvl_store.zig").QvlStore;
 const PeerTable = @import("peer_table.zig").PeerTable;
 const DhtService = dht.DhtService;
 
-pub const ActiveCircuit = struct {
-    session_id: [16]u8,
-    relay_address: std.net.Address,
+pub const CircuitHop = struct {
+    relay_id: [32]u8,
     relay_pubkey: [32]u8,
-    // Sticky Ephemeral Key (for optimizations)
+    session_id: [16]u8,
     ephemeral_keypair: crypto.dh.X25519.KeyPair,
+};
+
+pub const ActiveCircuit = struct {
+    path: std.ArrayList(CircuitHop),
+    target_id: [32]u8,
+    allocator: std.mem.Allocator,
+
+    pub fn deinit(self: *ActiveCircuit) void {
+        self.path.deinit();
+    }
 };
 
 pub const CircuitError = error{
@@ -103,41 +112,82 @@ pub const CircuitBuilder = struct {
         return .{ .packet = packet, .first_hop = relay_node.address };
     }
 
-    /// Create a sticky session circuit
-    pub fn createCircuit(self: *CircuitBuilder, relay_did: ?[]const u8) !ActiveCircuit {
-        // Select Relay (Random if null)
-        const selected_did = if (relay_did) |did| try self.allocator.dupe(u8, did) else blk: {
-            const trusted = try self.qvl_store.getTrustedRelays(0.5, 1);
-            if (trusted.len == 0) return error.NoRelaysAvailable;
-            break :blk trusted[0];
+    /// Build a multi-hop circuit to a specific target
+    /// Hops must be resolved NodeIDs [Relay1, Relay2, Relay3]
+    /// Packet flows: Me -> Relay1 -> Relay2 -> Relay3 -> Target
+    pub fn buildCircuit(
+        self: *CircuitBuilder,
+        hops: []const [32]u8,
+    ) !ActiveCircuit {
+        var circuit = ActiveCircuit{
+            .path = std.ArrayList(CircuitHop).init(self.allocator),
+            .target_id = [_]u8{0} ** 32, // Set later or unused for pure circuit
+            .allocator = self.allocator,
         };
-        defer self.allocator.free(selected_did);
+        errdefer circuit.deinit();
 
-        // Resolve Relay Keys
-        var relay_id = [_]u8{0} ** 32;
-        if (selected_did.len >= 32) @memcpy(&relay_id, selected_did[0..32]);
+        for (hops) |node_id| {
+            // Resolve Relay Keys
+            const node = self.dht.routing_table.findNode(node_id) orelse return error.RelayNotFound;
 
-        const relay_node = self.dht.routing_table.findNode(relay_id) orelse return error.RelayNotFound;
+            // Generate Session & Keys
+            const kp = crypto.dh.X25519.KeyPair.generate();
+            var session_id: [16]u8 = undefined;
+            std.crypto.random.bytes(&session_id);
 
-        const kp = crypto.dh.X25519.KeyPair.generate();
-        var session_id: [16]u8 = undefined;
-        std.crypto.random.bytes(&session_id);
-
-        return ActiveCircuit{
-            .session_id = session_id,
-            .relay_address = relay_node.address,
-            .relay_pubkey = relay_node.key,
-            .ephemeral_keypair = kp,
-        };
+            try circuit.path.append(CircuitHop{
+                .relay_id = node_id,
+                .relay_pubkey = node.key,
+                .session_id = session_id,
+                .ephemeral_keypair = kp,
+            });
+        }
+        return circuit;
     }
 
-    /// Send a payload on an existing circuit (reusing session/keys)
-    pub fn sendOnCircuit(self: *CircuitBuilder, circuit: *ActiveCircuit, target_did: []const u8, payload: []const u8) !relay.RelayPacket {
-        var target_id = [_]u8{0} ** 32;
-        if (target_did.len >= 32) @memcpy(&target_id, target_did[0..32]);
+    /// Send payload through the circuit
+    /// Recursively wraps the onion: Target <- H3 <- H2 <- H1 <- Me
+    pub fn sendOnCircuit(
+        self: *CircuitBuilder,
+        circuit: *ActiveCircuit,
+        target_id: [32]u8,
+        payload: []const u8,
+    ) !relay.RelayPacket {
+        // 1. Start with the payload destined for Target
+        // The last hop (Exit Node) sees: NextHop = Target.
+        // We wrap from inside out.
 
-        // Use stored keys for stickiness
-        return self.onion_builder.wrapLayer(payload, target_id, circuit.relay_pubkey, circuit.session_id, circuit.ephemeral_keypair);
+        // We need to construct the chain of packets.
+        // But `wrapLayer` produces a `RelayPacket` struct, which contains `payload`.
+        // To wrap again, we must ENCODE the inner packet to bytes, then wrap that as payload.
+
+        // Step A: Wrap for final destination
+        // The Exit Node (last hop) sends to Target.
+        // Exit Node uses `circuit.path.last`.
+        if (circuit.path.items.len == 0) return error.PathConstructionFailed;
+
+        const exit_hop = circuit.path.items[circuit.path.items.len - 1];
+
+        // Inner: Exit -> Target
+        var current_packet = try self.onion_builder.wrapLayer(payload, target_id, exit_hop.relay_pubkey, exit_hop.session_id, exit_hop.ephemeral_keypair);
+
+        // Step B: Wrap backwards
+        var i: usize = circuit.path.items.len - 1;
+        while (i > 0) : (i -= 1) {
+            const inner_hop = circuit.path.items[i]; // The one we just wrapped for
+            const outer_hop = circuit.path.items[i - 1]; // The one who sends to inner_hop
+
+            // Encode current packet to be payload for next layer
+            const inner_bytes = try current_packet.encode(self.allocator);
+            // Free the struct, we have bytes
+            current_packet.deinit(self.allocator);
+            defer self.allocator.free(inner_bytes);
+
+            // Wrap: Outer -> Inner
+            current_packet = try self.onion_builder.wrapLayer(inner_bytes, inner_hop.relay_id, outer_hop.relay_pubkey, outer_hop.session_id, outer_hop.ephemeral_keypair);
+        }
+
+        return current_packet;
     }
 };
 

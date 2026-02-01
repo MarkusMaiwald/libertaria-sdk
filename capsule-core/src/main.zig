@@ -4,7 +4,7 @@ const std = @import("std");
 const node_mod = @import("node.zig");
 const config_mod = @import("config.zig");
 
-const control_mod = @import("control.zig");
+const control_mod = @import("control");
 const tui_app = @import("tui/app.zig");
 
 pub fn main() !void {
@@ -129,7 +129,22 @@ pub fn main() !void {
         const state = if (args.len > cmd_idx + 1) args[cmd_idx + 1] else "open";
         try runCliCommand(allocator, .{ .Airlock = .{ .state = state } }, data_dir_override);
     } else if (std.mem.eql(u8, command, "monitor")) {
-        try tui_app.run(allocator, "dummy_socket_path");
+        // Load config to find socket path
+        const config_path = "config.json";
+        var config = config_mod.NodeConfig.loadFromJsonFile(allocator, config_path) catch {
+            std.log.err("Failed to load config for monitor. Is config.json present?", .{});
+            return error.ConfigLoadFailed;
+        };
+        defer config.deinit(allocator);
+
+        const data_dir = data_dir_override orelse config.data_dir;
+        const socket_path = if (std.fs.path.isAbsolute(config.control_socket_path))
+            try allocator.dupe(u8, config.control_socket_path)
+        else
+            try std.fs.path.join(allocator, &[_][]const u8{ data_dir, std.fs.path.basename(config.control_socket_path) });
+        defer allocator.free(socket_path);
+
+        try tui_app.run(allocator, socket_path);
     } else {
         printUsage();
     }

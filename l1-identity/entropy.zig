@@ -57,6 +57,12 @@ pub const EntropyStamp = struct {
     /// Argon2id hash output (32 bytes)
     hash: [HASH_LEN]u8,
 
+    /// Nonce used to solve the puzzle (16 bytes)
+    nonce: [16]u8,
+
+    /// Salt used for hashing (16 bytes)
+    salt: [16]u8,
+
     /// Difficulty: leading zero bits required (8-20 recommended)
     difficulty: u8,
 
@@ -95,6 +101,10 @@ pub const EntropyStamp = struct {
         var nonce: [16]u8 = undefined;
         crypto.random.bytes(&nonce);
 
+        // Generate fixed salt for this mining attempt
+        var salt: [SALT_LEN]u8 = undefined;
+        crypto.random.bytes(&salt);
+
         const timestamp = @as(u64, @intCast(std.time.timestamp()));
 
         var iterations: u64 = 0;
@@ -108,15 +118,17 @@ pub const EntropyStamp = struct {
                 if (carry == 0) break;
             }
 
-            // Compute stamp hash
+            // Compute stamp hash using stored salt
             var hash: [HASH_LEN]u8 = undefined;
-            computeStampHash(payload_hash, &nonce, timestamp, service_type, &hash);
+            computeStampHash(payload_hash, &nonce, &salt, timestamp, service_type, &hash);
 
             // Check difficulty (count leading zeros in hash)
             const zeros = countLeadingZeros(&hash);
             if (zeros >= difficulty) {
                 return EntropyStamp{
                     .hash = hash,
+                    .nonce = nonce,
+                    .salt = salt,
                     .difficulty = difficulty,
                     .memory_cost_kb = ARGON2_MEMORY_KB,
                     .timestamp_sec = timestamp,
@@ -162,7 +174,7 @@ pub const EntropyStamp = struct {
             return error.StampExpired;
         }
 
-        if (age < -60) {  // 60 second clock skew allowance
+        if (age < -60) { // 60 second clock skew allowance
             return error.StampFromFuture;
         }
 
@@ -172,24 +184,38 @@ pub const EntropyStamp = struct {
         }
 
         // Recompute hash and verify
-        // Note: We can't recover the nonce from the stamp, so we accept the hash as-is
-        // In production, the nonce should be stored in the stamp for verification
-        const zeros = countLeadingZeros(&self.hash);
-        if (zeros < self.difficulty) {
+        // Use the nonce/salt from the stamp to reproduce the work
+        var computed_hash: [HASH_LEN]u8 = undefined;
+        computeStampHash(payload_hash, &self.nonce, &self.salt, self.timestamp_sec, self.service_type, &computed_hash);
+
+        // Check if computed hash matches stored hash
+        if (!std.mem.eql(u8, &computed_hash, &self.hash)) {
             return error.HashInvalid;
         }
 
-        _ = payload_hash;  // Unused: for future verification
+        // Check if stored hash meets difficulty
+        const zeros = countLeadingZeros(&self.hash);
+        if (zeros < self.difficulty) {
+            return error.InsufficientDifficulty;
+        }
     }
 
-    /// Serialize stamp to bytes (for LWF payload inclusion)
-    pub fn toBytes(self: *const EntropyStamp) [58]u8 {
-        var buf: [58]u8 = undefined;
+    /// Serialize stamp to bytes (77 bytes)
+    pub fn toBytes(self: *const EntropyStamp) [77]u8 {
+        var buf: [77]u8 = undefined;
         var offset: usize = 0;
 
         // hash: 32 bytes
         @memcpy(buf[offset .. offset + 32], &self.hash);
         offset += 32;
+
+        // nonce: 16 bytes
+        @memcpy(buf[offset .. offset + 16], &self.nonce);
+        offset += 16;
+
+        // salt: 16 bytes
+        @memcpy(buf[offset .. offset + 16], &self.salt);
+        offset += 16;
 
         // difficulty: 1 byte
         buf[offset] = self.difficulty;
@@ -211,12 +237,20 @@ pub const EntropyStamp = struct {
     }
 
     /// Deserialize stamp from bytes
-    pub fn fromBytes(data: *const [58]u8) EntropyStamp {
+    pub fn fromBytes(data: *const [77]u8) EntropyStamp {
         var offset: usize = 0;
 
         var hash: [HASH_LEN]u8 = undefined;
         @memcpy(&hash, data[offset .. offset + 32]);
         offset += 32;
+
+        var nonce: [16]u8 = undefined;
+        @memcpy(&nonce, data[offset .. offset + 16]);
+        offset += 16;
+
+        var salt: [16]u8 = undefined;
+        @memcpy(&salt, data[offset .. offset + 16]);
+        offset += 16;
 
         const difficulty = data[offset];
         offset += 1;
@@ -231,6 +265,8 @@ pub const EntropyStamp = struct {
 
         return .{
             .hash = hash,
+            .nonce = nonce,
+            .salt = salt,
             .difficulty = difficulty,
             .memory_cost_kb = memory_cost_kb,
             .timestamp_sec = timestamp_sec,
@@ -248,6 +284,7 @@ pub const EntropyStamp = struct {
 fn computeStampHash(
     payload_hash: *const [32]u8,
     nonce: *const [16]u8,
+    salt: *const [16]u8,
     timestamp: u64,
     service_type: u16,
     output: *[HASH_LEN]u8,
@@ -267,11 +304,7 @@ fn computeStampHash(
 
     std.mem.writeInt(u16, input[offset .. offset + 2][0..2], service_type, .big);
 
-    // Generate random salt
-    var salt: [SALT_LEN]u8 = undefined;
-    crypto.random.bytes(&salt);
-
-    // Call Argon2id
+    // Call Argon2id with PROVIDED salt
     const result = argon2id_hash_raw(
         ARGON2_TIME_COST,
         ARGON2_MEMORY_KB,

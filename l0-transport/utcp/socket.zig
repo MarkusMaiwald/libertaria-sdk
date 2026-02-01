@@ -86,10 +86,10 @@ pub const UTCP = struct {
 
         // 2. Entropy Fast-Path (DoS Defense)
         if (header.flags & lwf.LWFFlags.HAS_ENTROPY != 0) {
-            if (data.len < lwf.LWFHeader.SIZE + 58) {
+            if (data.len < lwf.LWFHeader.SIZE + 77) {
                 return error.StampMissing;
             }
-            const stamp_bytes = data[lwf.LWFHeader.SIZE..][0..58];
+            const stamp_bytes = data[lwf.LWFHeader.SIZE..][0..77];
             const stamp = entropy.EntropyStamp.fromBytes(@ptrCast(stamp_bytes));
 
             // Perform light validation (no Argon2 recompute yet, just hash bits)
@@ -183,10 +183,11 @@ test "UTCP socket DoS defense: invalid entropy stamp" {
     defer frame.deinit(allocator);
     frame.header.flags |= lwf.LWFFlags.HAS_ENTROPY;
     frame.header.entropy_difficulty = 20; // High difficulty
-    @memset(frame.payload[0..58], 0);
+    @memset(frame.payload[0..77], 0);
     // Set valid timestamp (fresh)
+    // Offset: Hash(32) + Nonce(16) + Salt(16) + Diff(1) + Mem(2) = 67
     const now = @as(u64, @intCast(std.time.timestamp()));
-    std.mem.writeInt(u64, frame.payload[35..43], now, .big);
+    std.mem.writeInt(u64, frame.payload[67..75], now, .big);
 
     // 2. Send
     try client.sendFrame(server_addr, &frame, allocator);

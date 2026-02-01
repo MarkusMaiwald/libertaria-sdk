@@ -1,8 +1,8 @@
 //! IPC Client for TUI -> Daemon communication.
-//! Wraps control.zig types.
+//! Wraps control.zig types with deep-copying logic for memory safety.
 
 const std = @import("std");
-const control = @import("../control.zig");
+const control = @import("control");
 
 pub const NodeStatus = control.NodeStatus;
 pub const SlashEvent = control.SlashEvent;
@@ -24,73 +24,66 @@ pub const Client = struct {
         if (self.stream) |s| s.close();
     }
 
-    pub fn connect(self: *Client) !void {
-        // Connect to /tmp/capsule.sock
-        // TODO: Load from config
-        const path = "/tmp/capsule.sock";
-        const address = try std.net.Address.initUnix(path);
-        self.stream = try std.net.tcpConnectToAddress(address);
+    pub fn connect(self: *Client, socket_path: []const u8) !void {
+        self.stream = std.net.connectUnixSocket(socket_path) catch |err| {
+            std.log.err("Failed to connect to daemon at {s}: {}. Is it running?", .{ socket_path, err });
+            return err;
+        };
     }
 
     pub fn getStatus(self: *Client) !NodeStatus {
-        const resp = try self.request(.Status);
-        switch (resp) {
-            .NodeStatus => |s| return s,
+        var parsed = try self.request(.Status);
+        defer parsed.deinit();
+
+        switch (parsed.value) {
+            .NodeStatus => |s| return try self.deepCopyStatus(s),
             else => return error.UnexpectedResponse,
         }
     }
 
     pub fn getSlashLog(self: *Client, limit: usize) ![]SlashEvent {
-        const resp = try self.request(.{ .SlashLog = .{ .limit = limit } });
-        switch (resp) {
-            .SlashLogResult => |l| {
-                // We need to duplicate the list because response memory is transient (if using an arena in request)
-                // But for now, let's assume the caller handles it or we deep copy.
-                // Simpler: Return generic Response and let caller handle.
-                // Actually, let's just return the slice and hope the buffer lifetime management in request isn't too tricky.
-                // Wait, request() will likely use a local buffer. Returning a slice into it is unsafe.
-                // I need to use an arena or return a deep copy.
-                // For this MVP, I'll return the response object completely if possible, or copy.
-                // Let's implement deep copy later. For now, assume single-threaded blocking.
-                return try self.deepCopySlashLog(l);
-            },
+        var parsed = try self.request(.{ .SlashLog = .{ .limit = limit } });
+        defer parsed.deinit();
+
+        switch (parsed.value) {
+            .SlashLogResult => |l| return try self.deepCopySlashLog(l),
             else => return error.UnexpectedResponse,
         }
-    }
-
-    pub fn request(self: *Client, cmd: control.Command) !control.Response {
-        if (self.stream == null) return error.NotConnected;
-        const stream = self.stream.?;
-
-        // Send
-        var req_buf = std.ArrayList(u8){};
-        defer req_buf.deinit(self.allocator);
-        var w_struct = req_buf.writer(self.allocator);
-        var buffer: [128]u8 = undefined;
-        var adapter = w_struct.adaptToNewApi(&buffer);
-        try std.json.Stringify.value(cmd, .{}, &adapter.new_interface);
-        try adapter.new_interface.flush();
-        try stream.writeAll(req_buf.items);
-
-        // Read (buffered)
-        var resp_buf: [32768]u8 = undefined; // Large buffer for slash log
-        const bytes = try stream.read(&resp_buf);
-        if (bytes == 0) return error.ConnectionClosed;
-
-        // Parse (using allocator for string allocations inside union)
-        const parsed = try std.json.parseFromSlice(control.Response, self.allocator, resp_buf[0..bytes], .{ .ignore_unknown_fields = true });
-        // Note: parsed.value contains pointers to resp_buf if we used Leaky, but here we used allocator.
-        // Wait, std.json.parseFromSlice with allocator allocates strings!
-        // So we can return parsed.value.
-        return parsed.value;
     }
 
     pub fn getTopology(self: *Client) !TopologyInfo {
-        const resp = try self.request(.Topology);
-        switch (resp) {
+        var parsed = try self.request(.Topology);
+        defer parsed.deinit();
+
+        switch (parsed.value) {
             .TopologyInfo => |t| return try self.deepCopyTopology(t),
             else => return error.UnexpectedResponse,
         }
+    }
+
+    pub fn request(self: *Client, cmd: control.Command) !std.json.Parsed(control.Response) {
+        if (self.stream == null) return error.NotConnected;
+        const stream = self.stream.?;
+
+        const json_bytes = try std.json.Stringify.valueAlloc(self.allocator, cmd, .{});
+        defer self.allocator.free(json_bytes);
+        try stream.writeAll(json_bytes);
+
+        var resp_buf: [32768]u8 = undefined;
+        const bytes = try stream.read(&resp_buf);
+        if (bytes == 0) return error.ConnectionClosed;
+
+        return try std.json.parseFromSlice(control.Response, self.allocator, resp_buf[0..bytes], .{ .ignore_unknown_fields = true });
+    }
+
+    fn deepCopyStatus(self: *Client, s: NodeStatus) !NodeStatus {
+        return .{
+            .node_id = try self.allocator.dupe(u8, s.node_id),
+            .state = try self.allocator.dupe(u8, s.state),
+            .peers_count = s.peers_count,
+            .uptime_seconds = s.uptime_seconds,
+            .version = try self.allocator.dupe(u8, s.version),
+        };
     }
 
     fn deepCopySlashLog(self: *Client, events: []const SlashEvent) ![]SlashEvent {
@@ -108,7 +101,6 @@ pub const Client = struct {
     }
 
     fn deepCopyTopology(self: *Client, topo: TopologyInfo) !TopologyInfo {
-        // Deep copy nodes
         const nodes = try self.allocator.alloc(control.GraphNode, topo.nodes.len);
         for (topo.nodes, 0..) |n, i| {
             nodes[i] = .{
@@ -119,7 +111,6 @@ pub const Client = struct {
             };
         }
 
-        // Deep copy edges
         const edges = try self.allocator.alloc(control.GraphEdge, topo.edges.len);
         for (topo.edges, 0..) |e, i| {
             edges[i] = .{
@@ -133,5 +124,36 @@ pub const Client = struct {
             .nodes = nodes,
             .edges = edges,
         };
+    }
+
+    pub fn freeStatus(self: *Client, s: NodeStatus) void {
+        self.allocator.free(s.node_id);
+        self.allocator.free(s.state);
+        self.allocator.free(s.version);
+    }
+
+    pub fn freeSlashLog(self: *Client, events: []SlashEvent) void {
+        for (events) |ev| {
+            self.allocator.free(ev.target_did);
+            self.allocator.free(ev.reason);
+            self.allocator.free(ev.severity);
+            self.allocator.free(ev.evidence_hash);
+        }
+        self.allocator.free(events);
+    }
+
+    pub fn freeTopology(self: *Client, topo: TopologyInfo) void {
+        for (topo.nodes) |n| {
+            self.allocator.free(n.id);
+            self.allocator.free(n.status);
+            self.allocator.free(n.role);
+        }
+        self.allocator.free(topo.nodes);
+
+        for (topo.edges) |e| {
+            self.allocator.free(e.source);
+            self.allocator.free(e.target);
+        }
+        self.allocator.free(topo.edges);
     }
 };

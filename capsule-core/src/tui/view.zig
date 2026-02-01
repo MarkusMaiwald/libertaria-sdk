@@ -121,8 +121,8 @@ fn drawTrustGraph(app: *app_mod.AppState, win: vaxis.Window) !void {
         const nodes_count = topo.nodes.len;
         // Skip self (index 0) loop for now to draw it specially at center
 
-        // Self
-        _ = win.printSegment(.{ .text = "★", .style = .{ .bold = true, .fg = .{ .rgb = .{ 255, 215, 0 } } } }, .{ .row_offset = @intCast(cy), .col_offset = @intCast(cx) });
+        // Self (Preserved: ★ - using ● for compatibility)
+        _ = win.printSegment(.{ .text = "●", .style = .{ .bold = true, .fg = .{ .rgb = .{ 255, 215, 0 } } } }, .{ .row_offset = @intCast(cy), .col_offset = @intCast(cx) });
         _ = win.printSegment(.{ .text = "SELF" }, .{ .row_offset = @intCast(cy + 1), .col_offset = @intCast(cx - 2) });
 
         // Peers
@@ -154,10 +154,10 @@ fn drawTrustGraph(app: *app_mod.AppState, win: vaxis.Window) !void {
 
                 if (std.mem.eql(u8, node.status, "slashed")) {
                     style = .{ .fg = .{ .rgb = .{ 255, 50, 50 } }, .bold = true, .blink = true };
-                    char = "X";
+                    char = "×"; // Preserved: X
                 } else if (node.trust_score > 0.8) {
                     style = .{ .fg = .{ .rgb = .{ 100, 255, 100 } }, .bold = true };
-                    char = "⬢";
+                    char = "◆"; // Preserved: ⬢ (Hexagon)
                 }
 
                 _ = win.printSegment(.{ .text = char, .style = style }, .{ .row_offset = @intCast(py), .col_offset = @intCast(px) });

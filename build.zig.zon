@@ -1,0 +1,12 @@
+.{
+    .name = .libertaria_sdk,
+    .version = "0.15.2",
+    .dependencies = .{
+        .vaxis = .{
+            .url = "https://github.com/rockorager/libvaxis/archive/refs/heads/main.tar.gz",
+            .hash = "vaxis-0.5.1-BWNV_Bw_CQAIVNh1ekGVzbip25CYBQ_J3kgABnYGFnI4",
+        },
+    },
+    .paths = .{""},
+    .fingerprint = 0xb6db0622de53913f,
+}

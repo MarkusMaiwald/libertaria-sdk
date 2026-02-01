@@ -29,6 +29,12 @@ pub const NextHopHeader = struct {
     // We might add HMAC or integrity check here
 };
 
+pub const RelayResult = struct {
+    next_hop: [32]u8,
+    payload: []u8,
+    session_id: [16]u8,
+};
+
 /// A Relay Packet as it travels on the wire.
 /// It effectively contains an encrypted blob that the receiver can decrypt
 /// to reveal the NextHopHeader and the inner Payload.
@@ -144,7 +150,7 @@ pub const OnionBuilder = struct {
         packet: RelayPacket,
         receiver_secret_key: [32]u8,
         expected_session_id: ?[16]u8,
-    ) !struct { next_hop: [32]u8, payload: []u8, session_id: [16]u8 } {
+    ) !RelayResult {
         // 1. Compute Shared Secret from Ephemeral Key
         const shared_secret = crypto.dh.X25519.scalarmult(receiver_secret_key, packet.ephemeral_key) catch return error.DecryptionFailed;
         const tag_len = crypto.aead.chacha_poly.XChaCha20Poly1305.tag_length;
@@ -184,7 +190,7 @@ pub const OnionBuilder = struct {
         const payload = try self.allocator.alloc(u8, payload_len);
         @memcpy(payload, cleartext[32..]);
 
-        return .{
+        return RelayResult{
             .next_hop = next_hop,
             .payload = payload,
             .session_id = session_id,
