@@ -1,13 +1,8 @@
 //! DuckDB C API Bindings for Zig
 //! 
 //! Thin wrapper around libduckdb for Libertaria L4 Feed
-//! Targets: DuckDB 0.9.2+ (C API v1.4.4)
 
 const std = @import("std");
-
-// ============================================================================
-// C API Declarations (extern "C")
-// ============================================================================
 
 /// Opaque handle types
 pub const Database = opaque {};
@@ -15,7 +10,7 @@ pub const Connection = opaque {};
 pub const Result = opaque {};
 pub const Appender = opaque {};
 
-/// State types
+/// State enum for DuckDB operations
 pub const State = enum {
     success,
     error,
@@ -37,10 +32,7 @@ pub extern "c" fn duckdb_appender_append_int64(app: *Appender, val: i64) State;
 pub extern "c" fn duckdb_appender_append_uint64(app: *Appender, val: u64) State;
 pub extern "c" fn duckdb_appender_append_blob(app: *Appender, data: [*c]const u8, len: usize) State;
 
-// ============================================================================
-// Zig-Friendly Wrapper
-// ============================================================================
-
+/// Zig-friendly DB wrapper
 pub const DB = struct {
     ptr: *Database,
     
@@ -68,6 +60,7 @@ pub const DB = struct {
     }
 };
 
+/// Zig-friendly Connection wrapper
 pub const Conn = struct {
     ptr: *Connection,
     
@@ -85,14 +78,7 @@ pub const Conn = struct {
     }
 };
 
-// ============================================================================
-// TESTS
-// ============================================================================
-
 test "DuckDB open/close" {
-    // Note: Requires libduckdb.so at runtime
-    // This test is skipped in CI without DuckDB
-    
-    // var db = try DB.open(":memory:");
-    // defer db.close();
+    // Skipped - requires libduckdb.so at runtime
+    _ = DB.open(":memory:");
 }
