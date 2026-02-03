@@ -31,7 +31,8 @@ pub const TransportSkin = union(enum) {
     /// Cleanup skin resources
     pub fn deinit(self: *Self) void {
         switch (self.*) {
-            inline else => |*skin| skin.deinit(),
+            .raw => |*skin| skin.deinit(),
+            .mimic_https => |*skin| skin.deinit(),
         }
     }
     
