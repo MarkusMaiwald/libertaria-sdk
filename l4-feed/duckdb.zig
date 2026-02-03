@@ -19,7 +19,6 @@ pub const Appender = opaque {};
 pub const State = enum {
     success,
     error,
-    // ... more error codes
 };
 
 /// C API Functions

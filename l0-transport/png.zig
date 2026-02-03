@@ -71,12 +71,12 @@ pub const PngState = struct {
         const timing_dist_val = entropy[1] % 3;
         
         return EpochProfile{
-            .size_distribution = @enumFromInt(size_dist_val),
+            .size_distribution = @enumFromInt(@as(u32, size_dist_val)),
             .size_mean = @as(u16, 1200) + (@as(u16, entropy[2]) * 2), // 1200-1710 bytes
             .size_stddev = 100 + entropy[3], // 100-355 bytes
-            .timing_distribution = @enumFromInt(timing_dist_val),
-            .timing_lambda = 0.001 + (@as(f64, entropy[4]) / 255.0) * 0.019, // 0.001-0.02
-            .dummy_probability = @as(f64, entropy[5] % 16) / 100.0, // 0.0-0.15
+            .timing_distribution = @enumFromInt(@as(u32, timing_dist_val)),
+            .timing_lambda = 0.001 + (@as(f64, @floatFromInt(entropy[4])) / 255.0) * 0.019,
+            .dummy_probability = @as(f64, @floatFromInt(entropy[5] % 16)) / 100.0,
             .dummy_distribution = if (entropy[6] % 2 == 0) .Uniform else .Bursty,
             .epoch_packet_count = 100 + (@as(u32, entropy[7]) * 4), // 100-1116 packets
         };
@@ -202,6 +202,9 @@ pub const PngState = struct {
     }
     
     fn sampleGamma(self: *Self, shape: f64, scale: f64) f64 {
+        _ = self;
+        _ = shape;
+        _ = scale;
         // Marsaglia-Tsang method
         if (shape < 1.0) {
             const d = shape + 1.0 - 1.0 / 3.0;
