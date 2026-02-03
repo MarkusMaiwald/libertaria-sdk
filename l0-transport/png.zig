@@ -4,7 +4,7 @@
 //! Kenya-compliant: <1KB RAM per session, deterministic, no cloud calls.
 
 const std = @import("std");
-const crypto = @import("../l1-identity/crypto.zig");
+const crypto = @import("crypto");
 
 /// ChaCha20-based PNG state
 /// Deterministic: same seed = same noise sequence at both ends
@@ -173,15 +173,15 @@ pub const PngState = struct {
     
     fn sampleNormal(self: *Self, mean: f64, stddev: f64) f64 {
         // Box-Muller transform
-        const u1 = self.nextF64();
-        const u2 = self.nextF64();
-        const z0 = @sqrt(-2.0 * @log(u1)) * @cos(2.0 * std.math.pi * u2);
+        const uniform1 = self.nextF64();
+        const uniform2 = self.nextF64();
+        const z0 = @sqrt(-2.0 * @log(uniform1)) * @cos(2.0 * std.math.pi * uniform2);
         return mean + z0 * stddev;
     }
     
     fn samplePareto(self: *Self, scale: f64, shape: f64) f64 {
         const u = self.nextF64();
-        return scale / @pow(u, 1.0 / shape);
+        return scale / std.math.pow(f64, u, 1.0 / shape);
     }
     
     fn sampleBimodal(self: *Self, mean: f64, stddev: f64) f64 {

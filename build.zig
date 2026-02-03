@@ -255,6 +255,7 @@ pub fn build(b: *std.Build) void {
         .target = target,
         .optimize = optimize,
     });
+    png_mod.addImport("crypto", l1_mod);
 
     const transport_skins_mod = b.createModule(.{
         .root_source_file = b.path("l0-transport/transport_skins.zig"),

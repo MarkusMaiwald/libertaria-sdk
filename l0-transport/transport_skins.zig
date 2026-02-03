@@ -39,16 +39,18 @@ pub const TransportSkin = union(enum) {
     /// Returns owned slice (caller must free)
     pub fn wrap(self: *Self, allocator: std.mem.Allocator, lwf_frame: []const u8) ![]u8 {
         return switch (self.*) {
-            inline else => |*skin| skin.wrap(allocator, lwf_frame),
-        }
+            .raw => |*skin| skin.wrap(allocator, lwf_frame),
+            .mimic_https => |*skin| skin.wrap(allocator, lwf_frame),
+        };
     }
     
     /// Unwrap received data to extract LWF frame
     /// Returns owned slice (caller must free)
     pub fn unwrap(self: *Self, allocator: std.mem.Allocator, wire_data: []const u8) !?[]u8 {
         return switch (self.*) {
-            inline else => |*skin| skin.unwrap(allocator, wire_data),
-        }
+            .raw => |*skin| skin.unwrap(allocator, wire_data),
+            .mimic_https => |*skin| skin.unwrap(allocator, wire_data),
+        };
     }
     
     /// Get skin name for logging/debugging
