@@ -114,18 +114,17 @@ pub const RawSkin = struct {
         };
     }
     
-    pub fn deinit(self: *Self) void {
-        _ = self;
+    pub fn deinit(_: *Self) void {
+        // No cleanup needed for RawSkin
     }
     
     /// Raw: No wrapping, just copy
-    pub fn wrap(self: *Self, allocator: std.mem.Allocator, lwf_frame: []const u8) ![]u8 {
+    pub fn wrap(_: *Self, allocator: std.mem.Allocator, lwf_frame: []const u8) ![]u8 {
         return try allocator.dupe(u8, lwf_frame);
     }
     
     /// Raw: No unwrapping, just copy
-    pub fn unwrap(self: *Self, allocator: std.mem.Allocator, wire_data: []const u8) !?[]u8 {
-        _ = self;
+    pub fn unwrap(_: *Self, allocator: std.mem.Allocator, wire_data: []const u8) !?[]u8 {
         return try allocator.dupe(u8, wire_data);
     }
 };
@@ -163,8 +162,8 @@ pub const MimicHttpsSkin = struct {
         };
     }
     
-    pub fn deinit(self: *Self) void {
-        _ = self;
+    pub fn deinit(_: *Self) void {
+        // No cleanup needed for MimicHttpsSkin
     }
     
     /// Wrap LWF frame in WebSocket binary frame with PNG padding
