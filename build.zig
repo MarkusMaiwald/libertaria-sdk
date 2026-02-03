@@ -210,6 +210,8 @@ pub fn build(b: *std.Build) void {
     });
     l1_qvl_mod.addImport("trust_graph", l1_trust_graph_mod);
     l1_qvl_mod.addImport("time", time_mod);
+    // Note: libmdbx linking removed - using stub implementation for now
+    // TODO: Add real libmdbx when available on build system
 
     // QVL FFI (C ABI exports for L2 integration)
     const l1_qvl_ffi_mod = b.createModule(.{

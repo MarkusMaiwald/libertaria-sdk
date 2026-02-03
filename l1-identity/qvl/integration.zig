@@ -76,10 +76,7 @@ pub const HybridGraph = struct {
         if (self.cache_valid) {
             return self.cache.neighbors(node);
         } else {
-            // Load from persistent
-            const neighbors = try self.persistent.getOutgoing(node, self.allocator);
-            // Note: Caller must free, but we're returning borrowed data... need fix
-            // For now, ensure cache is loaded
+            // Ensure cache is loaded, then return neighbors
             try self.load();
             return self.cache.neighbors(node);
         }
@@ -151,22 +148,24 @@ pub const HybridGraph = struct {
 pub const GraphTransaction = struct {
     hybrid: *HybridGraph,
     pending_edges: std.ArrayList(RiskEdge),
+    allocator: std.mem.Allocator,
     
     const Self = @This();
     
     pub fn begin(hybrid: *HybridGraph, allocator: std.mem.Allocator) Self {
         return Self{
             .hybrid = hybrid,
-            .pending_edges = std.ArrayList(RiskEdge).init(allocator),
+            .pending_edges = .{}, // Empty, allocator passed on append
+            .allocator = allocator,
         };
     }
     
     pub fn deinit(self: *Self) void {
-        self.pending_edges.deinit();
+        self.pending_edges.deinit(self.allocator);
     }
     
     pub fn addEdge(self: *Self, edge: RiskEdge) !void {
-        try self.pending_edges.append(edge);
+        try self.pending_edges.append(self.allocator, edge);
     }
     
     pub fn commit(self: *Self) !void {
@@ -188,6 +187,7 @@ pub const GraphTransaction = struct {
 
 test "HybridGraph: load and detect betrayal" {
     const allocator = std.testing.allocator;
+    const time = @import("time");
     
     const path = "/tmp/test_hybrid_db";
     defer std.fs.deleteFileAbsolute(path) catch {};
@@ -201,13 +201,14 @@ test "HybridGraph: load and detect betrayal" {
     defer hybrid.deinit();
     
     // Add edges forming negative cycle
-    const ts = 1234567890;
-    try hybrid.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = ts + 86400 });
-    try hybrid.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = ts + 86400 });
-    try hybrid.addEdge(.{ .from = 2, .to = 0, .risk = 1.0, .timestamp = ts, .nonce = 2, .level = -7, .expires_at = ts + 86400 });
+    const ts = time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
+    const expires = ts.addSeconds(86400);
+    try hybrid.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
+    try hybrid.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = expires });
+    try hybrid.addEdge(.{ .from = 2, .to = 0, .risk = 1.0, .timestamp = ts, .nonce = 2, .level = 0, .expires_at = expires }); // level 0 = betrayal
     
     // Detect betrayal
-    const result = try hybrid.detectBetrayal(0);
+    var result = try hybrid.detectBetrayal(0);
     defer result.deinit();
     
     try std.testing.expect(result.betrayal_cycles.items.len > 0);
@@ -215,6 +216,7 @@ test "HybridGraph: load and detect betrayal" {
 
 test "GraphTransaction: commit and rollback" {
     const allocator = std.testing.allocator;
+    const time = @import("time");
     
     const path = "/tmp/test_tx_db";
     defer std.fs.deleteFileAbsolute(path) catch {};
@@ -230,9 +232,10 @@ test "GraphTransaction: commit and rollback" {
     defer txn.deinit();
     
     // Add edges
-    const ts = 1234567890;
-    try txn.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = ts + 86400 });
-    try txn.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = ts + 86400 });
+    const ts = time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
+    const expires = ts.addSeconds(86400);
+    try txn.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
+    try txn.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = expires });
     
     // Commit
     try txn.commit();
