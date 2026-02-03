@@ -1,0 +1,63 @@
+-- libertaria/lib.jan
+-- Main entry point for Libertaria SDK
+-- Sovereign; Kinetic; Anti-Fragile.
+
+module Libertaria exposing
+  ( -- Identity
+    identity.Identity
+  , identity.create, identity.rotate, identity.burn
+  , identity.is_valid, identity.is_expired
+  , identity.public_key, identity.fingerprint
+  , identity.sign, identity.verify
+  
+    -- Message
+  , message.Message
+  , message.create, message.create_reply
+  , message.sender, message.content, message.timestamp
+  , message.verify, message.is_authentic
+  , message.to_bytes, message.from_bytes
+  , message.hash, message.id
+  
+    -- Context (NCP)
+  , context.Context
+  , context.create, context.fork, context.merge, context.close
+  , context.current_depth, context.max_depth
+  , context.add_message, context.get_messages
+  , context.subscribe, context.unsubscribe
+  , context.to_astdb_query
+  
+    -- Memory
+  , memory.VectorStore
+  , memory.create_vector_store
+  , memory.store, memory.retrieve, memory.search
+  , memory.embed
+  , memory.sync, memory.export, memory.import
+  )
+
+import identity
+import message
+import context
+import memory
+
+-- SDK Version
+const VERSION = "0.1.0-alpha"
+const COMPATIBLE_JANUS_VERSION = ">= 1.0.0"
+
+-- Quick-start: Create sovereign agent with full stack
+fn create_sovereign_agent() -> SovereignAgent
+  let id = identity.create()
+  let root_context = context.create({})
+  let memory_store = memory.create_vector_store()
+  
+  { identity = id
+  , root_context = root_context
+  , memory = memory_store
+  , version = VERSION
+  }
+
+type SovereignAgent =
+  { identity: identity.Identity
+  , root_context: context.Context
+  , memory: memory.VectorStore
+  , version: string
+  }

@@ -1,0 +1,170 @@
+-- libertaria/context.jan
+-- NCP (Nexus Context Protocol) implementation
+-- Structured, hierarchical context management for agent conversations
+
+module Context exposing
+  ( Context
+  , create, fork, merge, close
+  , current_depth, max_depth
+  , add_message, get_messages
+  , subscribe, unsubscribe
+  , to_astdb_query
+  )
+
+import message.{Message}
+import memory.{VectorStore}
+import time.{timestamp}
+
+-- Context is a structured conversation container
+type Context =
+  { id: context_id.ContextId
+  , parent: ?context_id.ContextId  -- Hierarchical nesting
+  , depth: int                     -- Nesting level (prevents infinite loops)
+  , created_at: timestamp.Timestamp
+  , messages: list.List(Message)
+  , metadata: metadata.ContextMetadata
+  , vector_store: ?VectorStore     -- Semantic indexing
+  , subscribers: set.Set(fingerprint.Fingerprint)
+  , closed: bool
+  }
+
+type ContextConfig =
+  { max_depth: int = 100           -- Max nesting before forced flattening
+  , max_messages: int = 10000      -- Auto-archive older messages
+  , enable_vector_index: bool = true
+  , retention_policy: RetentionPolicy
+  }
+
+type RetentionPolicy =
+  | Keep_Forever
+  | Auto_Archive_After(duration.Duration)
+  | Delete_After(duration.Duration)
+
+-- Create root context
+-- Top-level conversation container
+fn create(config: ContextConfig) -> Context
+  let id = context_id.generate()
+  let now = timestamp.now()
+  let vs = if config.enable_vector_index
+           then some(memory.create_vector_store())
+           else null
+  
+  { id = id
+  , parent = null
+  , depth = 0
+  , created_at = now
+  , messages = list.empty()
+  , metadata = metadata.create(id)
+  , vector_store = vs
+  , subscribers = set.empty()
+  , closed = false
+  }
+
+-- Fork child context from parent
+-- Used for: sub-conversations, branching decisions, isolated experiments
+fn fork(parent: Context, reason: string, config: ContextConfig) -> result.Result(Context, error.ForkError)
+  if parent.depth >= config.max_depth then
+    error.err(MaxDepthExceeded)
+  else if parent.closed then
+    error.err(ParentClosed)
+  else
+    let id = context_id.generate()
+    let now = timestamp.now()
+    let vs = if config.enable_vector_index
+             then some(memory.create_vector_store())
+             else null
+    
+    let child =
+      { id = id
+      , parent = some(parent.id)
+      , depth = parent.depth + 1
+      , created_at = now
+      , messages = list.empty()
+      , metadata = metadata.create(id)
+        |> metadata.set_parent(parent.id)
+        |> metadata.set_fork_reason(reason)
+      , vector_store = vs
+      , subscribers = set.empty()
+      , closed = false
+      }
+    
+    ok(child)
+
+-- Merge child context back into parent
+-- Consolidates messages, preserves fork history
+fn merge(child: Context, into parent: Context) -> result.Result(Context, error.MergeError)
+  if child.parent != some(parent.id) then
+    error.err(NotMyParent)
+  else if child.closed then
+    error.err(ChildClosed)
+  else
+    let merged_messages = parent.messages ++ child.messages
+    let merged_subs = set.union(parent.subscribers, child.subscribers)
+    
+    let updated_parent =
+      { parent with
+        messages = merged_messages
+      , subscribers = merged_subs
+      , metadata = parent.metadata
+          |> metadata.add_merge_history(child.id, child.messages.length())
+      }
+    
+    ok(updated_parent)
+
+-- Close context (final state)
+-- No more messages, preserves history
+fn close(ctx: Context) -> Context
+  { ctx with closed = true }
+
+-- Get current nesting depth
+fn current_depth(ctx: Context) -> int
+  ctx.depth
+
+-- Get max allowed depth (from config)
+fn max_depth(ctx: Context) -> int
+  ctx.metadata.config.max_depth
+
+-- Add message to context
+-- Indexes in vector store if enabled
+fn add_message(ctx: Context, msg: Message) -> result.Result(Context, error.AddError)
+  if ctx.closed then
+    error.err(ContextClosed)
+  else
+    let updated = { ctx with messages = ctx.messages ++ [msg] }
+    
+    -- Index in vector store for semantic search
+    match ctx.vector_store with
+    | null -> ok(updated)
+    | some(vs) ->
+        let embedding = memory.embed(message.content(msg))
+        let indexed_vs = memory.store(vs, message.id(msg), embedding)
+        ok({ updated with vector_store = some(indexed_vs) })
+
+-- Get all messages in context
+fn get_messages(ctx: Context) -> list.List(Message)
+  ctx.messages
+
+-- Subscribe agent to context updates
+fn subscribe(ctx: Context, agent: fingerprint.Fingerprint) -> Context
+  { ctx with subscribers = set.insert(ctx.subscribers, agent) }
+
+-- Unsubscribe agent
+fn unsubscribe(ctx: Context, agent: fingerprint.Fingerprint) -> Context
+  { ctx with subscribers = set.remove(ctx.subscribers, agent) }
+
+-- Convert to ASTDB query for semantic search
+-- Enables: "Find similar contexts", "What did we discuss about X?"
+fn to_astdb_query(ctx: Context) -> astdb.Query
+  let message_hashes = list.map(ctx.messages, message.hash)
+  let time_range =
+    { start = ctx.created_at
+    , end = match list.last(ctx.messages) with
+            | null -> timestamp.now()
+            | some(last_msg) -> message.timestamp(last_msg)
+    }
+  
+  astdb.query()
+    |> astdb.with_context_id(ctx.id)
+    |> astdb.with_message_hashes(message_hashes)
+    |> astdb.with_time_range(time_range)
+    |> astdb.with_depth(ctx.depth)

@@ -1,0 +1,144 @@
+-- libertaria/message.jan
+-- Signed, tamper-proof messages between agents
+-- Messages are immutable once created, cryptographically bound to sender
+
+module Message exposing
+  ( Message
+  , create, create_reply
+  , sender, content, timestamp
+  , verify, is_authentic
+  , to_bytes, from_bytes
+  , hash, id
+  )
+
+import identity.{Identity}
+import time.{timestamp}
+import crypto.{hash, signature}
+import serde.{msgpack}
+
+-- A message is a signed envelope with content and metadata
+type Message =
+  { version: int              -- Protocol version (for migration)
+  , id: message_id.MessageId  -- Content-addressed ID
+  , parent: ?message_id.MessageId  -- For threads/replies
+  , sender: fingerprint.Fingerprint
+  , content_type: ContentType
+  , content: bytes.Bytes      -- Opaque payload
+  , created_at: timestamp.Timestamp
+  , signature: signature.Signature
+  }
+
+type ContentType =
+  | Text
+  | Binary
+  | Json
+  | Janus_Ast
+  | Encrypted  -- Content is encrypted for specific recipient(s)
+
+-- Create a new signed message
+-- Cryptographically binds content to sender identity
+fn create
+  ( from: Identity
+  , content_type: ContentType
+  , content: bytes.Bytes
+  , parent: ?message_id.MessageId = null
+  ) -> Message
+  
+  let now = timestamp.now()
+  let sender_fp = identity.fingerprint(from)
+  
+  -- Content-addressed ID: hash of content + metadata (before signing)
+  let preliminary =
+    { version = 1
+    , id = message_id.zero()  -- Placeholder
+    , parent = parent
+    , sender = sender_fp
+    , content_type = content_type
+    , content = content
+    , created_at = now
+    , signature = signature.zero()
+    }
+  
+  let msg_id = compute_id(preliminary)
+  let to_sign = serialize_for_signing({ preliminary with id = msg_id })
+  let sig = identity.sign(from, to_sign)
+  
+  { preliminary with
+    id = msg_id
+  , signature = sig
+  }
+
+-- Create a reply to an existing message
+-- Maintains thread structure
+fn create_reply
+  ( from: Identity
+  , to: Message
+  , content_type: ContentType
+  , content: bytes.Bytes
+  ) -> Message
+  create(from, content_type, content, parent = some(to.id))
+
+-- Get sender fingerprint
+fn sender(msg: Message) -> fingerprint.Fingerprint
+  msg.sender
+
+-- Get content
+fn content(msg: Message) -> bytes.Bytes
+  msg.content
+
+-- Get timestamp
+fn timestamp(msg: Message) -> timestamp.Timestamp
+  msg.created_at
+
+-- Verify message authenticity
+-- Checks: signature valid, sender identity not revoked
+fn verify(msg: Message, sender_id: Identity) -> bool
+  let to_verify = serialize_for_signing(msg)
+  identity.verify(sender_id, to_verify, msg.signature)
+
+-- Quick check without full identity lookup
+-- Just verifies signature format and version
+fn is_authentic(msg: Message) -> bool
+  msg.version == 1 and
+  msg.signature != signature.zero() and
+  msg.id == compute_id(msg)
+
+-- Serialize to bytes for wire transfer
+fn to_bytes(msg: Message) -> bytes.Bytes
+  msgpack.serialize(msg)
+
+-- Deserialize from bytes
+fn from_bytes(data: bytes.Bytes) -> result.Result(Message, error.DeserializeError)
+  msgpack.deserialize(data)
+
+-- Get content hash (for deduplication, indexing)
+fn hash(msg: Message) -> hash.Hash
+  crypto.blake3(msg.content)
+
+-- Get message ID
+fn id(msg: Message) -> message_id.MessageId
+  msg.id
+
+-- Internal: Compute content-addressed ID
+fn compute_id(msg: Message) -> message_id.MessageId
+  let canonical =
+    { version = msg.version
+    , parent = msg.parent
+    , sender = msg.sender
+    , content_type = msg.content_type
+    , content = msg.content
+    , created_at = msg.created_at
+    }
+  message_id.from_hash(crypto.blake3(msgpack.serialize(canonical)))
+
+-- Internal: Serialize for signing (excludes signature itself)
+fn serialize_for_signing(msg: Message) -> bytes.Bytes
+  msgpack.serialize
+    { version = msg.version
+    , id = msg.id
+    , parent = msg.parent
+    , sender = msg.sender
+    , content_type = msg.content_type
+    , content = msg.content
+    , created_at = msg.created_at
+    }
