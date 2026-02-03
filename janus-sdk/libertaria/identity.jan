@@ -1,0 +1,98 @@
+-- libertaria/identity.jan
+-- Cryptographic identity for sovereign agents
+-- Exit is Voice: Identity can be rotated, expired, or burned
+
+module Identity exposing
+  ( Identity
+  , create, rotate, burn
+  , is_valid, is_expired
+  , public_key, fingerprint
+  , sign, verify
+  )
+
+import crypto.{ed25519, hash}
+import time.{timestamp, duration}
+
+-- Core identity type with cryptographic material and metadata
+type Identity =
+  { public_key: ed25519.PublicKey
+  , secret_key: ed25519.SecretKey  -- Encrypted at rest
+  , created_at: timestamp.Timestamp
+  , expires_at: ?timestamp.Timestamp  -- Optional expiry
+  , rotated_from: ?fingerprint.Fingerprint  -- Chain of custody
+  , revoked: bool
+  }
+
+-- Create new sovereign identity
+-- Fresh keypair, no history, self-sovereign
+fn create() -> Identity
+  let (pk, sk) = ed25519.generate_keypair()
+  let now = timestamp.now()
+  
+  { public_key = pk
+  , secret_key = sk
+  , created_at = now
+  , expires_at = null
+  , rotated_from = null
+  , revoked = false
+  }
+
+-- Rotate identity: New keys, linked provenance
+-- Old identity becomes invalid after grace period
+fn rotate(old: Identity) -> (Identity, Identity)
+  assert not old.revoked "Cannot rotate revoked identity"
+  
+  let (new_pk, new_sk) = ed25519.generate_keypair()
+  let now = timestamp.now()
+  let old_fp = fingerprint.of_identity(old)
+  
+  let new_id =
+    { public_key = new_pk
+    , secret_key = new_sk
+    , created_at = now
+    , expires_at = null
+    , rotated_from = some(old_fp)
+    , revoked = false
+    }
+  
+  -- Old identity gets short grace period then auto-expires
+  let grace_period = duration.hours(24)
+  let expired_old = { old with expires_at = some(now + grace_period) }
+  
+  (new_id, expired_old)
+
+-- Burn identity: Cryptographic deletion
+-- After burn, no messages can be signed, verification still works for history
+fn burn(id: Identity) -> Identity
+  { id with
+    secret_key = ed25519.zero_secret(id.secret_key)
+  , revoked = true
+  , expires_at = some(timestamp.now())
+  }
+
+-- Check if identity is currently valid
+fn is_valid(id: Identity) -> bool
+  not id.revoked and not is_expired(id)
+
+-- Check if identity has expired
+fn is_expired(id: Identity) -> bool
+  match id.expires_at with
+  | null -> false
+  | some(t) -> timestamp.now() > t
+
+-- Get public key for sharing/verification
+fn public_key(id: Identity) -> ed25519.PublicKey
+  id.public_key
+
+-- Get fingerprint (short, unique identifier)
+fn fingerprint(id: Identity) -> fingerprint.Fingerprint
+  fingerprint.of_key(id.public_key)
+
+-- Sign message with this identity
+fn sign(id: Identity, message: bytes.Bytes) -> signature.Signature
+  assert is_valid(id) "Cannot sign with invalid identity"
+  ed25519.sign(id.secret_key, message)
+
+-- Verify signature against this identity's public key
+fn verify(id: Identity, message: bytes.Bytes, sig: signature.Signature) -> bool
+  ed25519.verify(id.public_key, message, sig)

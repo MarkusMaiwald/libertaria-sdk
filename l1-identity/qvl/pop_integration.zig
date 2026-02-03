@@ -11,6 +11,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const pathfinding = @import("pathfinding.zig");
+// Import proof_of_path relative from qvl directory
 const pop = @import("../proof_of_path.zig");
 const trust_graph = @import("trust_graph");
 

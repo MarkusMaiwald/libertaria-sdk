@@ -38,3 +38,9 @@ capsule.log
 *.swp
 *.swo
 *~
+
+# BDD Specifications - Gold worth, protect from competitors
+# Uncomment below to share specs with trusted collaborators only
+*.feature
+features/
+!features/README.md

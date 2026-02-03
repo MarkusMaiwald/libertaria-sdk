@@ -1,0 +1,207 @@
+-- libertaria/memory.jan
+-- Semantic memory with VectorDB (LanceDB) integration
+-- Agents remember context through embeddings, not just raw logs
+
+module Memory exposing
+  ( VectorStore
+  , create_vector_store
+  , store, retrieve, search
+  , embed  -- Uses Janus neuro module
+  , sync, export, import
+  )
+
+import neuro.{embedding}
+import serde.{lance}
+import time.{timestamp}
+
+-- Vector store configuration
+type VectorStore =
+  { uri: string  -- LanceDB connection URI
+  , dimension: int  -- Embedding dimension (e.g., 768 for BERT, 1536 for OpenAI)
+  , metric: DistanceMetric
+  , table: lance.Table
+  , cache: lru.Cache(vector_id.VectorId, embedding.Embedding)
+  }
+
+type DistanceMetric =
+  | Cosine        -- Best for semantic similarity
+  | Euclidean     -- Best for geometric distance
+  | DotProduct    -- Fastest, good for normalized embeddings
+
+-- Default configuration for agent memory
+fn default_config() -> { dimension: 1536, metric: Cosine }
+
+-- Create new vector store
+-- If uri points to existing store, opens it; otherwise creates new
+fn create_vector_store
+  ( uri: string = "memory.lance"
+  , config: { dimension: int, metric: DistanceMetric } = default_config()
+  ) -> VectorStore
+  
+  let table = lance.connect(uri)
+    |> lance.create_table("embeddings")
+    |> lance.with_vector_column("embedding", config.dimension)
+    |> lance.with_metric(config.metric)
+    |> lance.with_columns
+        [ { name = "content_hash", type = "string" }
+        , { name = "content_type", type = "string" }
+        , { name = "created_at", type = "timestamp" }
+        , { name = "context_id", type = "string", nullable = true }
+        , { name = "metadata", type = "json", nullable = true }
+        ]
+    |> lance.execute()
+  
+  { uri = uri
+  , dimension = config.dimension
+  , metric = config.metric
+  , table = table
+  , cache = lru.create(max_size = 1000)
+  }
+
+-- Generate embedding from content
+-- Uses Janus neuro module for local inference
+fn embed(content: bytes.Bytes, model: ?string = null) -> embedding.Embedding
+  let content_str = bytes.to_string(content)
+  neuro.embed(content_str, model = model)
+
+-- Store embedding in vector database
+fn store
+  ( vs: VectorStore
+  , id: vector_id.VectorId
+  , emb: embedding.Embedding
+  , content_hash: string  -- Blake3 hash of original content
+  , content_type: string = "text"
+  , context_id: ?string = null
+  , metadata: ?json.Json = null
+  ) -> VectorStore
+  
+  let record =
+    { id = id
+    , embedding = emb
+    , content_hash = content_hash
+    , content_type = content_type
+    , created_at = timestamp.now()
+    , context_id = context_id
+    , metadata = metadata
+    }
+  
+  lance.insert(vs.table, record)
+  
+  -- Update cache
+  let new_cache = lru.put(vs.cache, id, emb)
+  { vs with cache = new_cache }
+
+-- Retrieve exact embedding by ID
+fn retrieve(vs: VectorStore, id: vector_id.VectorId) -> ?embedding.Embedding
+  -- Check cache first
+  match lru.get(vs.cache, id) with
+  | some(emb) -> some(emb)
+  | null ->
+      -- Query LanceDB
+      let results = lance.query(vs.table)
+        |> lance.where("id = ", id)
+        |> lance.limit(1)
+        |> lance.execute()
+      
+      match list.head(results) with
+      | null -> null
+      | some(record) -> some(record.embedding)
+
+-- Semantic search: Find similar embeddings
+fn search
+  ( vs: VectorStore
+  , query_embedding: embedding.Embedding
+  , top_k: int = 10
+  , filter: ?string = null  -- Optional SQL filter
+  ) -> list.SearchResult
+  
+  let base_query = lance.query(vs.table)
+    |> lance.nearest_neighbors("embedding", query_embedding)
+    |> lance.limit(top_k)
+  
+  let filtered_query = match filter with
+    | null -> base_query
+    | some(f) -> base_query |> lance.where(f)
+  
+  lance.execute(filtered_query)
+    |> list.map(fn r ->
+      { id = r.id
+      , score = r.distance  -- Lower is better for cosine/euclidean
+      , content_hash = r.content_hash
+      , content_type = r.content_type
+      , created_at = r.created_at
+      , context_id = r.context_id
+      , metadata = r.metadata
+      }
+    )
+
+-- Sync to disk (ensure durability)
+fn sync(vs: VectorStore) -> result.Result((), error.SyncError)
+  lance.flush(vs.table)
+
+-- Export to portable format
+fn export(vs: VectorStore, path: string) -> result.Result((), error.ExportError)
+  lance.backup(vs.table, path)
+
+-- Import from portable format
+fn import(path: string) -> result.Result(VectorStore, error.ImportError)
+  let restored = lance.restore(path)
+  ok(create_vector_store(uri = restored.uri))
+
+-- Advanced: Hybrid search combining semantic + keyword
+type HybridResult =
+  { semantic_results: list.SearchResult
+  , keyword_results: list.SearchResult
+  , combined: list.SearchResult
+  , reranking_score: float
+  }
+
+fn hybrid_search
+  ( vs: VectorStore
+  , query_embedding: embedding.Embedding
+  , query_text: string
+  , top_k: int = 10
+  , semantic_weight: float = 0.7
+  ) -> HybridResult
+  
+  let semantic = search(vs, query_embedding, top_k * 2)
+  let keyword = lance.full_text_search(vs.table, query_text, top_k * 2)
+  
+  -- Reciprocal Rank Fusion for combining
+  let combined = reciprocal_rank_fusion(semantic, keyword, semantic_weight)
+  
+  { semantic_results = list.take(semantic, top_k)
+  , keyword_results = list.take(keyword, top_k)
+  , combined = list.take(combined, top_k)
+  , reranking_score = 0.0  -- Placeholder for cross-encoder reranking
+  }
+
+-- Internal: Reciprocal Rank Fusion algorithm
+fn reciprocal_rank_fusion
+  ( semantic: list.SearchResult
+  , keyword: list.SearchResult
+  , semantic_weight: float
+  ) -> list.SearchResult
+  
+  let k = 60.0  -- RRF constant
+  
+  let score_map = map.empty()
+  
+  -- Score semantic results
+  list.foreach_with_index(semantic, fn r, idx ->
+    let rank = idx + 1
+    let score = semantic_weight * (1.0 / (k + rank))
+    score_map[r.id] = map.get_or_default(score_map, r.id, 0.0) + score
+  )
+  
+  -- Score keyword results
+  list.foreach_with_index(keyword, fn r, idx ->
+    let rank = idx + 1
+    let score = (1.0 - semantic_weight) * (1.0 / (k + rank))
+    score_map[r.id] = map.get_or_default(score_map, r.id, 0.0) + score
+  )
+  
+  -- Sort by combined score
+  map.to_list(score_map)
+    |> list.sort_by(fn (id, score) -> score, descending = true)
+    |> list.map(fn (id, _) -> id)

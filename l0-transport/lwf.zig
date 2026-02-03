@@ -261,7 +261,7 @@ pub const LWFFrame = struct {
         };
     }
 
-    pub fn deinit(self: *LWFFrame, allocator: std.mem.Allocator) void {
+    pub fn deinit(self: *const LWFFrame, allocator: std.mem.Allocator) void {
         allocator.free(self.payload);
     }
 
