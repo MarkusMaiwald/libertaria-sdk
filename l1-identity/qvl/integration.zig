@@ -10,7 +10,7 @@ const types = @import("types.zig");
 const storage = @import("storage.zig");
 const betrayal = @import("betrayal.zig");
 const pathfinding = @import("pathfinding.zig");
-const pop_integration = @import("pop_integration.zig");
+const pop_integration = @import("pop_integration");
 
 const NodeId = types.NodeId;
 const RiskEdge = types.RiskEdge;
@@ -200,12 +200,15 @@ test "HybridGraph: load and detect betrayal" {
     var hybrid = HybridGraph.init(&persistent, allocator);
     defer hybrid.deinit();
     
-    // Add edges forming negative cycle
+    // Add edges forming negative cycle (sum of risks must be < 0)
     const ts = time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
     const expires = ts.addSeconds(86400);
-    try hybrid.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
-    try hybrid.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = expires });
-    try hybrid.addEdge(.{ .from = 2, .to = 0, .risk = 1.0, .timestamp = ts, .nonce = 2, .level = 0, .expires_at = expires }); // level 0 = betrayal
+    // Trust edges (negative risk = good)
+    try hybrid.addEdge(.{ .from = 0, .to = 1, .risk = -0.7, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
+    try hybrid.addEdge(.{ .from = 1, .to = 2, .risk = -0.7, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = expires });
+    // Betrayal edge (high positive risk creates negative cycle)
+    // -0.7 + -0.7 + 0.9 = -0.5 (negative cycle!)
+    try hybrid.addEdge(.{ .from = 2, .to = 0, .risk = 0.9, .timestamp = ts, .nonce = 2, .level = 0, .expires_at = expires });
     
     // Detect betrayal
     var result = try hybrid.detectBetrayal(0);

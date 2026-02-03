@@ -11,7 +11,7 @@
 const std = @import("std");
 const types = @import("types.zig");
 const pathfinding = @import("pathfinding.zig");
-const pop = @import("../proof_of_path.zig");
+const pop = @import("proof_of_path");
 const trust_graph = @import("trust_graph");
 
 const NodeId = types.NodeId;
