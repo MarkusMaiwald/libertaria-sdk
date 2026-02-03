@@ -248,6 +248,33 @@ pub fn build(b: *std.Build) void {
     const run_l4_feed_tests = b.addRunArtifact(l4_feed_tests);
 
     // ========================================================================
+    // RFC-0015: Transport Skins (DPI Resistance)
+    // ========================================================================
+    const png_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/png.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const transport_skins_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/transport_skins.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    transport_skins_mod.addImport("png", png_mod);
+
+    // Transport Skins tests
+    const png_tests = b.addTest(.{
+        .root_module = png_mod,
+    });
+    const run_png_tests = b.addRunArtifact(png_tests);
+
+    const transport_skins_tests = b.addTest(.{
+        .root_module = transport_skins_mod,
+    });
+    const run_transport_skins_tests = b.addRunArtifact(transport_skins_tests);
+
+    // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
     // ========================================================================
 
@@ -468,6 +495,8 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
     test_step.dependOn(&run_l2_policy_tests.step);
     test_step.dependOn(&run_l4_feed_tests.step);
+    test_step.dependOn(&run_png_tests.step);
+    test_step.dependOn(&run_transport_skins_tests.step);
 
     // ========================================================================
     // Examples
