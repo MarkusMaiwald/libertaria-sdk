@@ -16,6 +16,7 @@ pub const inference = @import("qvl/inference.zig");
 pub const pop = @import("qvl/pop_integration.zig");
 pub const storage = @import("qvl/storage.zig");
 pub const integration = @import("qvl/integration.zig");
+pub const gql = @import("qvl/gql.zig");
 
 pub const RiskEdge = types.RiskEdge;
 pub const NodeId = types.NodeId;
@@ -23,6 +24,11 @@ pub const AnomalyScore = types.AnomalyScore;
 pub const PersistentGraph = storage.PersistentGraph;
 pub const HybridGraph = integration.HybridGraph;
 pub const GraphTransaction = integration.GraphTransaction;
+
+// GQL exports
+pub const GQLQuery = gql.Query;
+pub const GQLStatement = gql.Statement;
+pub const parseGQL = gql.parse;
 
 test {
     @import("std").testing.refAllDecls(@This());
