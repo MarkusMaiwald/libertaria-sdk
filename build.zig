@@ -232,6 +232,22 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(qvl_ffi_lib);
 
     // ========================================================================
+    // L4 Feed — Temporal Event Store
+    // ========================================================================
+    const l4_feed_mod = b.createModule(.{
+        .root_source_file = b.path("l4-feed/feed.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // L4 Feed tests (requires libduckdb at runtime)
+    const l4_feed_tests = b.addTest(.{
+        .root_module = l4_feed_mod,
+    });
+    l4_feed_tests.linkLibC(); // Required for DuckDB C API
+    const run_l4_feed_tests = b.addRunArtifact(l4_feed_tests);
+
+    // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
     // ========================================================================
 
@@ -451,6 +467,7 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_qvl_tests.step);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
     test_step.dependOn(&run_l2_policy_tests.step);
+    test_step.dependOn(&run_l4_feed_tests.step);
 
     // ========================================================================
     // Examples
