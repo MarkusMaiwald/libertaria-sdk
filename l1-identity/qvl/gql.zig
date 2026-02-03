@@ -8,6 +8,7 @@ const std = @import("std");
 pub const ast = @import("gql/ast.zig");
 pub const lexer = @import("gql/lexer.zig");
 pub const parser = @import("gql/parser.zig");
+pub const codegen = @import("gql/codegen.zig");
 
 /// Parse GQL query string into AST
 pub fn parse(allocator: std.mem.Allocator, query: []const u8) !ast.Query {
@@ -40,3 +41,6 @@ pub const ReturnStatement = ast.ReturnStatement;
 pub const GraphPattern = ast.GraphPattern;
 pub const NodePattern = ast.NodePattern;
 pub const EdgePattern = ast.EdgePattern;
+
+// Re-export code generator
+pub const generateZig = codegen.generate;
