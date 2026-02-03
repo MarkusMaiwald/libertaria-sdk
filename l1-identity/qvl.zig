@@ -14,10 +14,12 @@ pub const pathfinding = @import("qvl/pathfinding.zig");
 pub const gossip = @import("qvl/gossip.zig");
 pub const inference = @import("qvl/inference.zig");
 pub const pop = @import("qvl/pop_integration.zig");
+pub const storage = @import("qvl/storage.zig");
 
 pub const RiskEdge = types.RiskEdge;
 pub const NodeId = types.NodeId;
 pub const AnomalyScore = types.AnomalyScore;
+pub const PersistentGraph = storage.PersistentGraph;
 
 test {
     @import("std").testing.refAllDecls(@This());
