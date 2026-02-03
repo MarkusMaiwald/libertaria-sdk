@@ -70,15 +70,20 @@ pub const PngState = struct {
         const size_dist_val = entropy[0] % 4;
         const timing_dist_val = entropy[1] % 3;
         
+        // Use wrapping arithmetic to avoid overflow panics in debug mode
+        const size_mean_val = @as(u16, 1200) +% @as(u16, @as(u32, entropy[2]) * 2);
+        const size_stddev_val = @as(u16, 100) +% @as(u16, entropy[3]);
+        const epoch_count = @as(u32, 100) +% (@as(u32, entropy[7]) * 4);
+        
         return EpochProfile{
             .size_distribution = @enumFromInt(@as(u32, size_dist_val)),
-            .size_mean = @as(u16, 1200) + (@as(u16, entropy[2]) * 2), // 1200-1710 bytes
-            .size_stddev = 100 + entropy[3], // 100-355 bytes
+            .size_mean = size_mean_val,
+            .size_stddev = size_stddev_val,
             .timing_distribution = @enumFromInt(@as(u32, timing_dist_val)),
             .timing_lambda = 0.001 + (@as(f64, @floatFromInt(entropy[4])) / 255.0) * 0.019,
             .dummy_probability = @as(f64, @floatFromInt(entropy[5] % 16)) / 100.0,
             .dummy_distribution = if (entropy[6] % 2 == 0) .Uniform else .Bursty,
-            .epoch_packet_count = 100 + (@as(u32, entropy[7]) * 4), // 100-1116 packets
+            .epoch_packet_count = epoch_count,
         };
     }
     
