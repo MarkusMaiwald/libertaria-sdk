@@ -91,7 +91,6 @@ pub const Lexer = struct {
             return self.makeToken(.eof, 0);
         }
         
-        const start = self.pos;
         const c = self.source[self.pos];
         
         // Identifiers and keywords
@@ -168,7 +167,7 @@ pub const Lexer = struct {
     
     /// Read all tokens into array
     pub fn tokenize(self: *Self) ![]Token {
-        var tokens = std.ArrayList(Token).init(self.allocator);
+        var tokens: std.ArrayList(Token) = .{};
         errdefer tokens.deinit(self.allocator);
         
         while (true) {
@@ -177,7 +176,7 @@ pub const Lexer = struct {
             if (tok.type == .eof) break;
         }
         
-        return tokens.toOwnedSlice();
+        return tokens.toOwnedSlice(self.allocator);
     }
     
     // =========================================================================
@@ -277,7 +276,7 @@ pub const Lexer = struct {
         }
         
         const text = self.source[start..self.pos];
-        const tok_type = if (is_float) .float_literal else .integer_literal;
+        const tok_type: TokenType = if (is_float) .float_literal else .integer_literal;
         
         return Token{
             .type = tok_type,
@@ -344,34 +343,20 @@ fn isAlphaNum(c: u8) bool {
 }
 
 fn keywordFromString(text: []const u8) TokenType {
-    const map = std.ComptimeStringMap(TokenType, .{
-        .{ "MATCH", .match },
-        .{ "match", .match },
-        .{ "CREATE", .create },
-        .{ "create", .create },
-        .{ "DELETE", .delete },
-        .{ "delete", .delete },
-        .{ "RETURN", .return_keyword },
-        .{ "return", .return_keyword },
-        .{ "WHERE", .where },
-        .{ "where", .where },
-        .{ "AS", .as_keyword },
-        .{ "as", .as_keyword },
-        .{ "AND", .and_keyword },
-        .{ "and", .and_keyword },
-        .{ "OR", .or_keyword },
-        .{ "or", .or_keyword },
-        .{ "NOT", .not_keyword },
-        .{ "not", .not_keyword },
-        .{ "NULL", .null_keyword },
-        .{ "null", .null_keyword },
-        .{ "TRUE", .true_keyword },
-        .{ "true", .true_keyword },
-        .{ "FALSE", .false_keyword },
-        .{ "false", .false_keyword },
-    });
-    
-    return map.get(text) orelse .identifier;
+    // Zig 0.15.2 compatible: use switch instead of ComptimeStringMap
+    if (std.mem.eql(u8, text, "MATCH") or std.mem.eql(u8, text, "match")) return .match;
+    if (std.mem.eql(u8, text, "CREATE") or std.mem.eql(u8, text, "create")) return .create;
+    if (std.mem.eql(u8, text, "DELETE") or std.mem.eql(u8, text, "delete")) return .delete;
+    if (std.mem.eql(u8, text, "RETURN") or std.mem.eql(u8, text, "return")) return .return_keyword;
+    if (std.mem.eql(u8, text, "WHERE") or std.mem.eql(u8, text, "where")) return .where;
+    if (std.mem.eql(u8, text, "AS") or std.mem.eql(u8, text, "as")) return .as_keyword;
+    if (std.mem.eql(u8, text, "AND") or std.mem.eql(u8, text, "and")) return .and_keyword;
+    if (std.mem.eql(u8, text, "OR") or std.mem.eql(u8, text, "or")) return .or_keyword;
+    if (std.mem.eql(u8, text, "NOT") or std.mem.eql(u8, text, "not")) return .not_keyword;
+    if (std.mem.eql(u8, text, "NULL") or std.mem.eql(u8, text, "null")) return .null_keyword;
+    if (std.mem.eql(u8, text, "TRUE") or std.mem.eql(u8, text, "true")) return .true_keyword;
+    if (std.mem.eql(u8, text, "FALSE") or std.mem.eql(u8, text, "false")) return .false_keyword;
+    return .identifier;
 }
 
 // ============================================================================
@@ -382,8 +367,8 @@ test "Lexer: simple keywords" {
     const allocator = std.testing.allocator;
     const source = "MATCH (n) RETURN n";
     
-    var lexer = Lexer.init(source, allocator);
-    const tokens = try lexer.tokenize();
+    var lex = Lexer.init(source, allocator);
+    const tokens = try lex.tokenize();
     defer allocator.free(tokens);
     
     try std.testing.expectEqual(TokenType.match, tokens[0].type);

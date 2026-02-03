@@ -27,20 +27,20 @@ pub const Parser = struct {
     
     /// Parse complete query
     pub fn parse(self: *Self) !ast.Query {
-        var statements = std.ArrayList(ast.Statement).init(self.allocator);
+        var statements = std.ArrayList(ast.Statement){};
         errdefer {
             for (statements.items) |*s| s.deinit();
-            statements.deinit();
+            statements.deinit(self.allocator);
         }
         
         while (!self.isAtEnd()) {
             const stmt = try self.parseStatement();
-            try statements.append(stmt);
+            try statements.append(self.allocator, stmt);
         }
         
         return ast.Query{
             .allocator = self.allocator,
-            .statements = try statements.toOwnedSlice(),
+            .statements = try statements.toOwnedSlice(self.allocator),
         };
     }
     
@@ -66,7 +66,7 @@ pub const Parser = struct {
     }
     
     fn parseMatchStatement(self: *Self) !ast.MatchStatement {
-        const pattern = try self.parseGraphPattern();
+        var pattern = try self.parseGraphPattern();
         errdefer pattern.deinit();
         
         var where: ?ast.Expression = null;
@@ -92,30 +92,30 @@ pub const Parser = struct {
     
     fn parseDeleteStatement(self: *Self) !ast.DeleteStatement {
         // Simple: DELETE identifier [, identifier]*
-        var targets = std.ArrayList(ast.Identifier).init(self.allocator);
+        var targets = std.ArrayList(ast.Identifier){};
         errdefer {
             for (targets.items) |*t| t.deinit();
-            targets.deinit();
+            targets.deinit(self.allocator);
         }
         
         while (true) {
             const ident = try self.parseIdentifier();
-            try targets.append(ident);
+            try targets.append(self.allocator, ident);
             
             if (!self.match(.comma)) break;
         }
         
         return ast.DeleteStatement{
             .allocator = self.allocator,
-            .targets = try targets.toOwnedSlice(),
+            .targets = try targets.toOwnedSlice(self.allocator),
         };
     }
     
     fn parseReturnStatement(self: *Self) !ast.ReturnStatement {
-        var items = std.ArrayList(ast.ReturnItem).init(self.allocator);
+        var items = std.ArrayList(ast.ReturnItem){};
         errdefer {
             for (items.items) |*i| i.deinit();
-            items.deinit();
+            items.deinit(self.allocator);
         }
         
         while (true) {
@@ -126,7 +126,7 @@ pub const Parser = struct {
                 alias = try self.parseIdentifier();
             }
             
-            try items.append(ast.ReturnItem{
+            try items.append(self.allocator, ast.ReturnItem{
                 .expression = expr,
                 .alias = alias,
             });
@@ -136,7 +136,7 @@ pub const Parser = struct {
         
         return ast.ReturnStatement{
             .allocator = self.allocator,
-            .items = try items.toOwnedSlice(),
+            .items = try items.toOwnedSlice(self.allocator),
         };
     }
     
@@ -145,53 +145,53 @@ pub const Parser = struct {
     // =========================================================================
     
     fn parseGraphPattern(self: *Self) !ast.GraphPattern {
-        var paths = std.ArrayList(ast.PathPattern).init(self.allocator);
+        var paths = std.ArrayList(ast.PathPattern){};
         errdefer {
             for (paths.items) |*p| p.deinit();
-            paths.deinit();
+            paths.deinit(self.allocator);
         }
         
         while (true) {
             const path = try self.parsePathPattern();
-            try paths.append(path);
+            try paths.append(self.allocator, path);
             
             if (!self.match(.comma)) break;
         }
         
         return ast.GraphPattern{
             .allocator = self.allocator,
-            .paths = try paths.toOwnedSlice(),
+            .paths = try paths.toOwnedSlice(self.allocator),
         };
     }
     
     fn parsePathPattern(self: *Self) !ast.PathPattern {
-        var elements = std.ArrayList(ast.PathElement).init(self.allocator);
+        var elements = std.ArrayList(ast.PathElement){};
         errdefer {
             for (elements.items) |*e| e.deinit();
-            elements.deinit();
+            elements.deinit(self.allocator);
         }
         
         // Must start with a node
         const node = try self.parseNodePattern();
-        try elements.append(ast.PathElement{ .node = node });
+        try elements.append(self.allocator, ast.PathElement{ .node = node });
         
         // Optional: edge - node - edge - node ...
         while (self.check(.minus) or self.check(.arrow_left)) {
             const edge = try self.parseEdgePattern();
-            try elements.append(ast.PathElement{ .edge = edge });
+            try elements.append(self.allocator, ast.PathElement{ .edge = edge });
             
             const next_node = try self.parseNodePattern();
-            try elements.append(ast.PathElement{ .node = next_node });
+            try elements.append(self.allocator, ast.PathElement{ .node = next_node });
         }
         
         return ast.PathPattern{
             .allocator = self.allocator,
-            .elements = try elements.toOwnedSlice(),
+            .elements = try elements.toOwnedSlice(self.allocator),
         };
     }
     
     fn parseNodePattern(self: *Self) !ast.NodePattern {
-        try self.consume(.left_paren, "Expected '('");
+        _ = try self.consume(.left_paren, "Expected '('");
         
         // Optional variable: (n) or (:Label)
         var variable: ?ast.Identifier = null;
@@ -200,15 +200,15 @@ pub const Parser = struct {
         }
         
         // Optional labels: (:Label1:Label2)
-        var labels = std.ArrayList(ast.Identifier).init(self.allocator);
+        var labels = std.ArrayList(ast.Identifier){};
         errdefer {
             for (labels.items) |*l| l.deinit();
-            labels.deinit();
+            labels.deinit(self.allocator);
         }
         
         while (self.match(.colon)) {
             const label = try self.parseIdentifier();
-            try labels.append(label);
+            try labels.append(self.allocator, label);
         }
         
         // Optional properties: ({key: value})
@@ -217,12 +217,12 @@ pub const Parser = struct {
             properties = try self.parsePropertyMap();
         }
         
-        try self.consume(.right_paren, "Expected ')'");
+        _ = try self.consume(.right_paren, "Expected ')'");
         
         return ast.NodePattern{
             .allocator = self.allocator,
             .variable = variable,
-            .labels = try labels.toOwnedSlice(),
+            .labels = try labels.toOwnedSlice(self.allocator),
             .properties = properties,
         };
     }
@@ -239,10 +239,10 @@ pub const Parser = struct {
         
         // Edge details in brackets: -[r:TYPE]-
         var variable: ?ast.Identifier = null;
-        var types = std.ArrayList(ast.Identifier).init(self.allocator);
+        var types = std.ArrayList(ast.Identifier){};
         errdefer {
             for (types.items) |*t| t.deinit();
-            types.deinit();
+            types.deinit(self.allocator);
         }
         var properties: ?ast.PropertyMap = null;
         var quantifier: ?ast.Quantifier = null;
@@ -256,7 +256,7 @@ pub const Parser = struct {
             // Type: [:TRUST]
             while (self.match(.colon)) {
                 const edge_type = try self.parseIdentifier();
-                try types.append(edge_type);
+                try types.append(self.allocator, edge_type);
             }
             
             // Properties: [{level: 3}]
@@ -269,22 +269,22 @@ pub const Parser = struct {
                 quantifier = try self.parseQuantifier();
             }
             
-            try self.consume(.right_bracket, "Expected ']'");
+            _ = try self.consume(.right_bracket, "Expected ']'");
         }
         
         // Arrow end
         if (direction == .outgoing) {
-            try self.consume(.arrow_right, "Expected '->'");
+            _ = try self.consume(.arrow_right, "Expected '->'");
         } else {
             // Incoming already consumed <-, now just need -
-            try self.consume(.minus, "Expected '-'");
+            _ = try self.consume(.minus, "Expected '-'");
         }
         
         return ast.EdgePattern{
             .allocator = self.allocator,
             .direction = direction,
             .variable = variable,
-            .types = try types.toOwnedSlice(),
+            .types = try types.toOwnedSlice(self.allocator),
             .properties = properties,
             .quantifier = quantifier,
         };
@@ -311,20 +311,20 @@ pub const Parser = struct {
     }
     
     fn parsePropertyMap(self: *Self) !ast.PropertyMap {
-        try self.consume(.left_brace, "Expected '{'");
+        _ = try self.consume(.left_brace, "Expected '{'");
         
-        var entries = std.ArrayList(ast.PropertyEntry).init(self.allocator);
+        var entries = std.ArrayList(ast.PropertyEntry){};
         errdefer {
             for (entries.items) |*e| e.deinit();
-            entries.deinit();
+            entries.deinit(self.allocator);
         }
         
         while (!self.check(.right_brace) and !self.isAtEnd()) {
             const key = try self.parseIdentifier();
-            try self.consume(.colon, "Expected ':'");
+            _ = try self.consume(.colon, "Expected ':'");
             const value = try self.parseExpression();
             
-            try entries.append(ast.PropertyEntry{
+            try entries.append(self.allocator, ast.PropertyEntry{
                 .key = key,
                 .value = value,
             });
@@ -332,11 +332,11 @@ pub const Parser = struct {
             if (!self.match(.comma)) break;
         }
         
-        try self.consume(.right_brace, "Expected '}'");
+        _ = try self.consume(.right_brace, "Expected '}'");
         
         return ast.PropertyMap{
             .allocator = self.allocator,
-            .entries = try entries.toOwnedSlice(),
+            .entries = try entries.toOwnedSlice(self.allocator),
         };
     }
     
@@ -398,7 +398,7 @@ pub const Parser = struct {
     }
     
     fn parseComparison(self: *Self) !ast.Expression {
-        var left = try self.parseAdditive();
+        const left = try self.parseAdditive();
         
         const op: ?ast.ComparisonOperator = blk: {
             if (self.match(.eq)) break :blk .eq;
@@ -432,7 +432,6 @@ pub const Parser = struct {
     }
     
     fn parseAdditive(self: *Self) !ast.Expression {
-        _ = self;
         // Simplified: just return primary for now
         return try self.parsePrimary();
     }
@@ -491,7 +490,7 @@ pub const Parser = struct {
     
     fn match(self: *Self, tok_type: TokenType) bool {
         if (self.check(tok_type)) {
-            self.advance();
+            _ = self.advance();
             return true;
         }
         return false;
@@ -539,7 +538,7 @@ test "Parser: simple MATCH" {
     defer allocator.free(tokens);
     
     var parser = Parser.init(tokens, allocator);
-    const query = try parser.parse();
+    var query = try parser.parse();
     defer query.deinit();
     
     try std.testing.expectEqual(2, query.statements.len);
@@ -556,7 +555,7 @@ test "Parser: path pattern" {
     defer allocator.free(tokens);
     
     var parser = Parser.init(tokens, allocator);
-    const query = try parser.parse();
+    var query = try parser.parse();
     defer query.deinit();
     
     try std.testing.expectEqual(1, query.statements[0].match.pattern.paths.len);

@@ -223,10 +223,8 @@ pub const Literal = union(enum) {
     null: void,
     
     pub fn deinit(self: *Literal) void {
-        switch (self.*) {
-            .string => |s| std.heap.raw_free(s),
-            else => {},
-        }
+        // Strings are slices into source - no cleanup needed
+        _ = self;
     }
 };
 
@@ -235,7 +233,8 @@ pub const Identifier = struct {
     name: []const u8,
     
     pub fn deinit(self: *Identifier) void {
-        std.heap.raw_free(self.name);
+        // No allocator needed - name is a slice into source
+        _ = self;
     }
 };
 
@@ -258,9 +257,8 @@ pub const BinaryOp = struct {
     
     pub fn deinit(self: *BinaryOp) void {
         self.left.deinit();
-        std.heap.raw_free(self.left);
-        self.right.deinit();
-        std.heap.raw_free(self.right);
+        // Note: Can't free self.left/right without allocator
+        // Memory managed by arena or leaked for now
     }
 };
 
@@ -277,9 +275,8 @@ pub const Comparison = struct {
     
     pub fn deinit(self: *Comparison) void {
         self.left.deinit();
-        std.heap.raw_free(self.left);
         self.right.deinit();
-        std.heap.raw_free(self.right);
+        // Note: Can't free self.left/right without allocator
     }
 };
 
