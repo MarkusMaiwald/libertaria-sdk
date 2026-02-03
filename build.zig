@@ -201,6 +201,18 @@ pub fn build(b: *std.Build) void {
     l1_trust_graph_mod.addImport("crypto", l1_mod);
 
     // ========================================================================
+    // L1 Proof of Path Module (PoP)
+    // ========================================================================
+    const l1_pop_mod = b.createModule(.{
+        .root_source_file = b.path("l1-identity/proof_of_path.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_pop_mod.addImport("trust_graph", l1_trust_graph_mod);
+    l1_pop_mod.addImport("time", time_mod);
+    l1_pop_mod.addImport("soulkey", l1_soulkey_mod);
+
+    // ========================================================================
     // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
     // ========================================================================
     const l1_qvl_mod = b.createModule(.{
@@ -209,6 +221,7 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     l1_qvl_mod.addImport("trust_graph", l1_trust_graph_mod);
+    l1_qvl_mod.addImport("proof_of_path", l1_pop_mod);
     l1_qvl_mod.addImport("time", time_mod);
     // Note: libmdbx linking removed - using stub implementation for now
     // TODO: Add real libmdbx when available on build system

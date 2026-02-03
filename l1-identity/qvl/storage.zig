@@ -65,6 +65,10 @@ pub const PersistentGraph = struct {
     
     /// Add edge
     pub fn addEdge(self: *Self, edge: RiskEdge) !void {
+        // Register nodes first
+        try self.nodes.put(edge.from, {});
+        try self.nodes.put(edge.to, {});
+        
         const key = EdgeKey{ .from = edge.from, .to = edge.to };
         try self.edges.put(key, edge);
         
@@ -96,8 +100,15 @@ pub const PersistentGraph = struct {
         var graph = RiskGraph.init(allocator);
         errdefer graph.deinit();
         
-        var it = self.edges.valueIterator();
-        while (it.next()) |edge| {
+        // First add all nodes
+        var node_it = self.nodes.keyIterator();
+        while (node_it.next()) |node| {
+            try graph.addNode(node.*);
+        }
+        
+        // Then add all edges
+        var edge_it = self.edges.valueIterator();
+        while (edge_it.next()) |edge| {
             try graph.addEdge(edge.*);
         }
         
