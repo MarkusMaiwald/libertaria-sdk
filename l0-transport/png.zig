@@ -71,9 +71,9 @@ pub const PngState = struct {
         const timing_dist_val = entropy[1] % 3;
         
         // Use wrapping arithmetic to avoid overflow panics in debug mode
-        const size_mean_val = @as(u16, 1200) +% @as(u16, @as(u32, entropy[2]) * 2);
-        const size_stddev_val = @as(u16, 100) +% @as(u16, entropy[3]);
-        const epoch_count = @as(u32, 100) +% (@as(u32, entropy[7]) * 4);
+        const size_mean_val = @as(u16, 1200 +% (@as(u16, entropy[2]) * 2));
+        const size_stddev_val = @as(u16, 100 +% entropy[3]);
+        const epoch_count: u32 = 100 +% (@as(u32, entropy[7]) * 4);
         
         return EpochProfile{
             .size_distribution = @enumFromInt(@as(u32, size_dist_val)),

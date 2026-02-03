@@ -36,7 +36,7 @@ pub const FeedEvent = extern struct {
     parent_id: u64,             // 0 = none (for replies/threading)
     
     comptime {
-        std.debug.assert(@sizeOf(FeedEvent) == 104);
+        std.debug.assert(@sizeOf(FeedEvent) == 96);
     }
 };
 
@@ -196,7 +196,7 @@ pub const FeedStore = struct {
 // ============================================================================
 
 test "FeedEvent size" {
-    comptime try std.testing.expectEqual(@sizeOf(FeedEvent), 104);
+    comptime try std.testing.expectEqual(@sizeOf(FeedEvent), 96);
 }
 
 test "EventType conversion" {
