@@ -362,16 +362,12 @@ pub const SkinProber = struct {
         });
     }
     
-    fn probeRaw(self: SkinProber, timeout_ms: u32) !bool {
-        _ = self;
-        _ = timeout_ms;
+    fn probeRaw(_: SkinProber, _: u32) !bool {
         // TODO: Implement UDP probe
         return false;
     }
     
-    fn probeHttps(self: SkinProber, timeout_ms: u32) !bool {
-        _ = self;
-        _ = timeout_ms;
+    fn probeHttps(_: SkinProber, _: u32) !bool {
         // TODO: Implement HTTPS probe
         return true; // Assume HTTPS works for now
     }

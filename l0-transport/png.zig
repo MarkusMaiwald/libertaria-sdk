@@ -179,7 +179,7 @@ pub const PngState = struct {
         return scale / std.math.pow(f64, u, 1.0 / shape);
     }
     
-    fn sampleBimodal(self: *Self, mean: f64, stddev: f64) f64 {
+    fn sampleBimodal(self: *Self, _: f64, _: f64) f64 {
         // Two modes: small (600) and large (1440), ratio 1:3
         if (self.nextF64() < 0.25) {
             // Small mode around 600 bytes

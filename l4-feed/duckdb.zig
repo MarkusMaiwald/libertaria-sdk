@@ -16,9 +16,9 @@ pub const Result = opaque {};
 pub const Appender = opaque {};
 
 /// State types
-pub const State = enum(u32) {
-    success = 0,
-    error = 1,
+pub const State = enum {
+    success,
+    error,
 };
 
 /// C API Functions
