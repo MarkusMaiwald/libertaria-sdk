@@ -74,6 +74,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // RFC-0015: Transport Skins (MIMIC_DNS for DPI evasion)
+    const mimic_dns_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/mimic_dns.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // RFC-0015: MIMIC_HTTPS with Domain Fronting
+    const mimic_https_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/mimic_https.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const bridge_mod = b.createModule(.{
         .root_source_file = b.path("l2-federation/bridge.zig"),
         .target = target,
@@ -245,6 +259,51 @@ pub fn build(b: *std.Build) void {
     });
     qvl_ffi_lib.linkLibC();
     b.installArtifact(qvl_ffi_lib);
+
+    // ========================================================================
+    // L4 Feed — Temporal Event Store
+    // ========================================================================
+    const l4_feed_mod = b.createModule(.{
+        .root_source_file = b.path("l4-feed/feed.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // L4 Feed tests (requires libduckdb at runtime)
+    const l4_feed_tests = b.addTest(.{
+        .root_module = l4_feed_mod,
+    });
+    l4_feed_tests.linkLibC(); // Required for DuckDB C API
+    const run_l4_feed_tests = b.addRunArtifact(l4_feed_tests);
+
+    // ========================================================================
+    // RFC-0015: Transport Skins (DPI Resistance)
+    // ========================================================================
+    const png_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/png.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    const transport_skins_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/transport_skins.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    transport_skins_mod.addImport("png", png_mod);
+    transport_skins_mod.addImport("mimic_dns", mimic_dns_mod);
+    transport_skins_mod.addImport("mimic_https", mimic_https_mod);
+
+    // Transport Skins tests
+    const png_tests = b.addTest(.{
+        .root_module = png_mod,
+    });
+    const run_png_tests = b.addRunArtifact(png_tests);
+
+    const transport_skins_tests = b.addTest(.{
+        .root_module = transport_skins_mod,
+    });
+    const run_transport_skins_tests = b.addRunArtifact(transport_skins_tests);
 
     // ========================================================================
     // Tests (with C FFI support for Argon2 + liboqs)
@@ -466,6 +525,9 @@ pub fn build(b: *std.Build) void {
     test_step.dependOn(&run_l1_qvl_tests.step);
     test_step.dependOn(&run_l1_qvl_ffi_tests.step);
     test_step.dependOn(&run_l2_policy_tests.step);
+    test_step.dependOn(&run_l4_feed_tests.step);
+    test_step.dependOn(&run_png_tests.step);
+    test_step.dependOn(&run_transport_skins_tests.step);
 
     // ========================================================================
     // Examples

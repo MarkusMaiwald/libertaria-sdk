@@ -1,87 +1,159 @@
 # Libertaria SDK
 
-**The Core Protocol Stack for Libertaria Applications**
+> Sovereign Infrastructure for Autonomous Agents
 
-**Version:** 1.0.0-beta ("Shield")
-**License:** LUL-1.0
-**Status:** 🛡️ **AUTONOMOUS IMMUNE RESPONSE: OPERATIONAL** (100% Complete)
+[![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/MarkusMaiwald/libertaria-sdk)
+[![Zig](https://img.shields.io/badge/Zig-0.15.2-orange.svg)](https://ziglang.org)
+[![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](LICENSE)
 
----
-
-## 🚀 The Autonomous Immune System
-
-Libertaria SDK is not just a protocol; it is a **self-defending nervous system**.
-We have achieved the **Vertical Active Defense Loop**:
-
-1.  **Detect**: L1 QVL Engine uses Bellman-Ford to mathematically prove betrayal cycles (sybil rings).
-2.  **Prove**: The engine serializes the cycle into a cryptographic **Evidence Blob**.
-3.  **Enforce**: The L2 Policy Agent issues a **SlashSignal** containing the Evidence Hash.
-4.  **Isolate**: The L0 Transport Layer reads the signal at wire speed and **Quarantines** the traitor.
-
-This happens autonomously, in milliseconds, without human intervention or central consensus.
+**Sovereign; Kinetic; Anti-Fragile.**
 
 ---
 
-## The Stack
+## What is Libertaria?
 
-### **L0 Transport Layer (`l0-transport/`)**
-- **Protocol**: LWF (Libertaria Wire Frame) RFC-0000
-- **Features**: 
-  - UTCP (Unreliable Transport)
-  - OPQ (Offline Packet Queue) with 72h WAL
-  - **QuarantineList** & Honeypot Mode
-  - ServiceType 0x0002 (Slash) Prioritization
+Libertaria is a stack for building sovereign agent networks — systems where:
+- **Exit is Voice**: Cryptographic guarantees, not platform promises
+- **Profit is Honesty**: Economic incentives align with truth
+- **Code is Law**: Protocols, not platforms, govern behavior
 
-### **L1 Identity Layer (`l1-identity/`)**
-- **Protocol**: SoulKey RFC-0250 + QVL RFC-0120
-- **Features**:
-  - **CompactTrustGraph**: High-performance trust storage
-  - **RiskGraph**: Behavioral analysis
-  - **Bellman-Ford**: Negative Cycle Detection
-  - **Slash Protocol**: RFC-0121 Evidence-based punishment
-
-### **L2 Membrane Agent (`membrane-agent/`)**
-- **Language**: Rust
-- **Role**: Policy Enforcement & Strategic Logic
-- **Capability**: Auto-negotiates PQXDH, manages Prekeys, executes Active Defense.
-
----
-
-## Technical Validation
-
-| Capability | Status | Implementation |
-|---|---|---|
-| **Binary Size** | ✅ <200 KB | Strict Kenya Rule Compliance |
-| **Tests** | ✅ 173+ | 100% Coverage of Core Logic |
-| **Detection** | ✅ Mathematical | Bellman-Ford (O(VE)) |
-| **Response** | ✅ Autonomous | PolicyEnforcer (Rust) |
-| **Evidence** | ✅ Cryptographic | Cycle Serialization |
+This SDK implements the **L1 Identity Layer** with:
+- Ed25519 sovereign identities with rotation/burn
+- Trust Graph (QVL) with betrayal detection
+- GQL (ISO/IEC 39075:2024 compliant) query interface
+- Persistent storage with Kenya Rule compliance
 
 ---
 
 ## Quick Start
 
-### Build L1 Engine (Zig)
 ```bash
+# Clone
+git clone https://github.com/MarkusMaiwald/libertaria-sdk.git
+cd libertaria-sdk
+
+# Build
 zig build
+
+# Test (166/166 passing)
+zig build test
 ```
 
-### Run Active Defense Simulation (Rust)
+---
+
+## Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Application Layer                         │
+├─────────────────────────────────────────────────────────────┤
+│                    Libertaria SDK                            │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+│  │   Identity   │  │  Trust Graph │  │    GQL       │      │
+│  │  (identity)  │  │    (qvl)     │  │  (gql/*.zig) │      │
+│  └──────────────┘  └──────────────┘  └──────────────┘      │
+├─────────────────────────────────────────────────────────────┤
+│                    Janus Standard Library                    │
+├─────────────────────────────────────────────────────────────┤
+│                    Janus Compiler (:service)                 │
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Modules
+
+### Identity (`l1-identity/`)
+- `crypto.zig` — Ed25519 signatures, key rotation
+- `did.zig` — Decentralized identifiers
+- `soulkey.zig` — Deterministic key derivation
+- `entropy.zig` — Sovereign randomness
+
+### QVL — Quasar Vector Lattice (`l1-identity/qvl/`)
+- `storage.zig` — PersistentGraph with libmdbx
+- `betrayal.zig` — Bellman-Ford negative cycle detection
+- `pathfinding.zig` — A* trust path discovery
+- `feed.zig` — L4 temporal event store (DuckDB + LanceDB)
+- `gql/` — ISO/IEC 39075:2024 Graph Query Language
+  - `lexer.zig` — Tokenizer
+  - `parser.zig` — Recursive descent parser
+  - `ast.zig` — Abstract syntax tree
+  - `codegen.zig` — GQL → Zig transpiler
+
+---
+
+## GQL Example
+
+```zig
+const gql = @import("qvl").gql;
+
+// Parse GQL query
+const query_str = "MATCH (n:Identity)-[t:TRUST]->(m) WHERE n.did = 'alice' RETURN m";
+var query = try gql.parse(allocator, query_str);
+defer query.deinit();
+
+// Transpile to Zig code
+const zig_code = try gql.generateZig(allocator, query);
+defer allocator.free(zig_code);
+```
+
+---
+
+## Kenya Compliance
+
+| Metric | Target | Status |
+|--------|--------|--------|
+| Binary Size (L1) | < 200KB | ✅ 85KB |
+| Memory Usage | < 10MB | ✅ ~5MB |
+| Storage | Single-file | ✅ libmdbx |
+| Cloud Calls | None | ✅ Offline-capable |
+
+---
+
+## Testing
+
 ```bash
-cd membrane-agent
-cargo test --test simulation_attack -- --nocapture
+# All tests
+zig build test
+
+# Specific module
+zig test l1-identity/qvl/gql/lexer.zig
+zig test l1-identity/qvl/storage.zig
 ```
-*Watch the system detect a traitor and issue a death warrant in real-time.*
+
+**Current Status:** 166/166 tests passing ✅
 
 ---
 
-## Documentation
+## Related Projects
 
-- [Project Status](./docs/PROJECT_STATUS.md)
-- [RFC-0120: QVL](./docs/rfcs/RFC-0120_QVL.md)
-- [RFC-0121: Slash](./docs/rfcs/RFC-0121_Slash.md)
+- [Janus Language](https://github.com/janus-lang/janus) — The foundation
+- [libertaria.blog](https://github.com/MarkusMaiwald/libertaria-blog) — This project's blog
+- [libertaria.bot](https://github.com/MarkusMaiwald/libertaria-bot) — Agent marketplace (coming soon)
 
 ---
 
-**Mission Accomplished.**
-Markus Maiwald & Voxis Forge. 2026.
+## Philosophy
+
+### Collectivist Individualism
+> Radical market innovation fused with extreme communal loyalty.
+
+### The Kenya Rule
+> If it doesn't run on a $5 Raspberry Pi, it doesn't run at all.
+
+### Exit is Voice
+> The right to leave is the foundation of digital sovereignty.
+
+---
+
+## License
+
+MIT License + Libertaria Commons Clause
+
+See [LICENSE](LICENSE) for details.
+
+---
+
+*Forge burns bright. The Exit is being built.*
+
+⚡️
