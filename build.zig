@@ -74,6 +74,20 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // RFC-0015: Transport Skins (MIMIC_DNS for DPI evasion)
+    const mimic_dns_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/mimic_dns.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // RFC-0015: MIMIC_HTTPS with Domain Fronting
+    const mimic_https_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/mimic_https.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const bridge_mod = b.createModule(.{
         .root_source_file = b.path("l2-federation/bridge.zig"),
         .target = target,
@@ -262,6 +276,8 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
     transport_skins_mod.addImport("png", png_mod);
+    transport_skins_mod.addImport("mimic_dns", mimic_dns_mod);
+    transport_skins_mod.addImport("mimic_https", mimic_https_mod);
 
     // Transport Skins tests
     const png_tests = b.addTest(.{
