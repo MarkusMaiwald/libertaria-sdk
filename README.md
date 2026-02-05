@@ -27,25 +27,28 @@ The right to leave is the foundation of digital freedom. We build systems where 
 **3. No Tokens, No Hype**
 We don't sell hope. We sell working infrastructure. No ICOs. No governance theater. No speculative assets whose value depends on greater fools. We build tools people pay for because they work.
 
-**4. Post-Quantum by Default**
+**4. Chains Are Dead — Rethink Crypto**
+Even Vitalik agrees: chains, on their own, are dead. Blockchain communities dancing around the holy golden lamb — a database! — is insane. We've been saying this for 5 years. It's time to rethink what crypto really is: not ledgers to speculate on, but infrastructure to build on.
+
+**5. Post-Quantum by Default**
 Cryptographic signatures that survive the quantum era are not a future upgrade — they are table stakes. We don't wait for NIST standards to settle; we implement and adapt.
 
-**5. AI as First-Class Citizen**
+**6. AI as First-Class Citizen**
 Agents are not chatbots bolted onto legacy systems. They are sovereign actors with identity, reputation, and capability. Our stack is built for a world where humans and AI coexist as peers.
 
-**6. The Kenya Rule**
+**7. The Kenya Rule**
 If it doesn't run on a solar-powered phone in Mombasa, it doesn't run at all. We optimize for minimal resource consumption, offline-first operation, and maximum accessibility.
 
-**7. Interplanetary by Necessity**
+**8. Interplanetary by Necessity**
 Humanity's future is multi-planetary. We build systems that function across light-minutes of delay, that synchronize asynchronously, that work when Earth is on the other side of the Sun.
 
-**8. Protocols Over Platforms**
+**9. Protocols Over Platforms**
 We don't build walled gardens. We build open protocols that anyone can implement, extend, or fork. The value is in the network, not in our servers.
 
-**9. Trust But Verify**
+**10. Trust But Verify**
 Cryptographic proof, not platform promises. Reputation graphs, not follower counts. Transparent incentives, not hidden algorithms.
 
-**10. Code is Speech, Exit is Voice**
+**11. Code is Speech, Exit is Voice**
 We defend the right to build, to experiment, to fork, and to leave. Technology is a tool of liberation — never of control.
 
 ### This SDK
