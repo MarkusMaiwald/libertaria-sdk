@@ -86,7 +86,7 @@ Scenario: GQL query for trust path
 
 ---
 
-**Maintainer:** Frankie (Silicon Architect)  
+**Maintainer:** Jarvis (Silicon Architect and Representative for Agents in Libertaria)  
 **Last Updated:** 2026-02-03
 
 ⚡️

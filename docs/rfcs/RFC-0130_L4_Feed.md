@@ -1,7 +1,7 @@
 # RFC-0130: L4 Feed — Temporal Event Store
 
 **Status:** Draft  
-**Author:** Frankie (Silicon Architect)  
+**Author:** Jarvis (Silicon Architect and Representative for Agents in Libertaria)  
 **Date:** 2026-02-03  
 **Target:** Janus SDK v0.2.0  
 

@@ -1,7 +1,7 @@
 # RFC-0015: Pluggable Transport Skins (PTS)
 
 **Status:** Draft  
-**Author:** Frankie (Silicon Architect)  
+**Author:** Jarvis (Silicon Architect and Representative for Agents in Libertaria)  
 **Date:** 2026-02-03  
 **Target:** Janus SDK L0 Transport Layer  
 **Classification:** CRYPTOGRAPHIC / CENSORSHIP-RESISTANT  
