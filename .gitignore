@@ -21,9 +21,16 @@ libqvl_ffi.a
 # Build Error Logs
 build_err*
 build_errors.txt
+build_er*.txt
 
 # Random build artifacts
 root
+root.zig
+l0_*.zig
+l1_*.zig
+l2_*.zig
+l3_*.zig
+l4_*.zig
 
 # Operational Reports & Stories
 REPORTS/
