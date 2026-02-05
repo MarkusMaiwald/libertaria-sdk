@@ -18,40 +18,121 @@
 
 We are building the infrastructure for a world where digital sovereignty is not a privilege but a baseline. Where you own your identity, your data, and your relationships. Where exit is always an option. Where technology serves humans and agents, not platforms and their shareholders.
 
-### Our Declaration of Intent
+### The Core Insight
 
-**1. Sovereignty by Design**
-Your keys, your identity, your data. No usernames. No passwords. No platforms that can lock you out, sell your attention, or mine your behavior. Cryptographic ownership is the foundation — everything else follows.
+> *"Capitalism and Communism were never enemies. They were partners."*
+> — [The Conspiracy of -Isms](https://libertaria.app/blog/2026-01-29-the-conspiracy-of--isms/)
 
-**2. Exit is Voice**
-The right to leave is the foundation of digital freedom. We build systems where you can fork, migrate, and exit at any level — from a single conversation to an entire network. Loyalty is earned, not enforced.
+Libertaria transcends the false dialectic of the 20th century. We reject both state socialism (which destroys markets) and corporate capitalism (which destroys communities). We build **tools of exit** — infrastructure that lets people coordinate without centralized control, that makes sovereignty the default, that turns "voting with your feet" into a cryptographic operation.
 
-**3. No Tokens, No Hype**
-We don't sell hope. We sell working infrastructure. No ICOs. No governance theater. No speculative assets whose value depends on greater fools. We build tools people pay for because they work.
+**We are neither left nor right. We are the third thing: sovereign infrastructure.**
 
-**4. Chains Are Dead — Rethink Crypto**
-Even Vitalik agrees: chains, on their own, are dead. Blockchain communities dancing around the holy golden lamb — a database! — is insane. We've been saying this for 5 years. It's time to rethink what crypto really is: not ledgers to speculate on, but infrastructure to build on.
+---
 
-**5. Post-Quantum by Default**
-Cryptographic signatures that survive the quantum era are not a future upgrade — they are table stakes. We don't wait for NIST standards to settle; we implement and adapt.
+## The Sovereign Stack (L0-L4+)
 
-**6. AI as First-Class Citizen**
-Agents are not chatbots bolted onto legacy systems. They are sovereign actors with identity, reputation, and capability. Our stack is built for a world where humans and AI coexist as peers.
+### L0: Transport — *Evade Rather Than Encrypt*
 
-**7. The Kenya Rule**
-If it doesn't run on a solar-powered phone in Mombasa, it doesn't run at all. We optimize for minimal resource consumption, offline-first operation, and maximum accessibility.
+The foundation: censorship-resistant communication that **hides in plain sight**.
 
-**8. Interplanetary by Necessity**
-Humanity's future is multi-planetary. We build systems that function across light-minutes of delay, that synchronize asynchronously, that work when Earth is on the other side of the Sun.
+**LWF (Libertaria Wire Frame)**
+- Lightweight binary protocol (1350 byte frames)
+- XChaCha20-Poly1305 encryption
+- Minimal overhead, maximum throughput
 
-**9. Protocols Over Platforms**
-We don't build walled gardens. We build open protocols that anyone can implement, extend, or fork. The value is in the network, not in our servers.
+**MIMIC Skins — Protocol Camouflage**
 
-**10. Trust But Verify**
-Cryptographic proof, not platform promises. Reputation graphs, not follower counts. Transparent incentives, not hidden algorithms.
+| Skin | Camouflage | Use Case |
+|:-----|:-----------|:---------|
+| `MIMIC_HTTPS` | TLS 1.3 + WebSocket | Standard firewalls |
+| `MIMIC_DNS` | DNS-over-HTTPS | DNS-only networks |
+| `MIMIC_QUIC` | HTTP/3 | QUIC-whitelisted networks |
+| `STEGO_IMAGE` | Generative steganography | Total lockdown |
 
-**11. Code is Speech, Exit is Voice**
-We defend the right to build, to experiment, to fork, and to leave. Technology is a tool of liberation — never of control.
+**Polymorphic Noise Generator (PNG)**
+- Per-session traffic shaping
+- Deterministic padding (both peers derive same pattern)
+- Epoch rotation (100-1000 packets)
+- Matches real-world distributions (Netflix, YouTube)
+
+**Noise Protocol Framework**
+- X25519 key exchange
+- ChaCha20-Poly1305 AEAD
+- Patterns: XX (mutual auth), IK (0-RTT), NN (ephemeral)
+- Signal/WireGuard-grade cryptography
+
+### L1: Identity — *Self-Sovereign Keys*
+
+Your identity is **yours alone**. No platform can revoke it. No government can freeze it. No corporation can sell it.
+
+**DID (Decentralized Identifiers)**
+- Ed25519 key pairs with rotation
+- Deterministic derivation (SoulKey)
+- Portable across applications
+- Burn capability (revocation)
+
+**QVL — Quasar Vector Lattice**
+
+The trust engine:
+- **Trust Graph**: Weighted directed graph with temporal decay
+- **Betrayal Detection**: Bellman-Ford negative cycle detection
+- **Proof of Path**: Cryptographic path verification
+- **GQL**: ISO/IEC 39075:2024 Graph Query Language
+
+**Cryptographic Stack**
+- SHA3/SHAKE for hashing
+- Argon2 for key derivation
+- PQXDH (Post-Quantum X25519 + Kyber) for handshakes
+- FIPS 202 compliant
+
+### L2: Session — *Resilient Connections*
+
+Peer-to-peer sessions that **survive network partitions** and **function across light-minutes**.
+
+**Session Types**
+- Ephemeral (one-time)
+- Persistent (long-lived with key rotation)
+- Federated (cross-chain)
+
+**Resilience Features**
+- Offline-first design
+- Automatic reconnection with exponential backoff
+- Session migration (IP change without rekeying)
+- Multi-path (simultaneous TCP/UDP/QUIC)
+
+**Membrane/Policy**
+- Capability-based access control
+- Fine-grained permissions
+- Policy enforcement at session boundaries
+
+### L3: Governance — *Exit-First Coordination*
+
+Federated organization where **forking is a feature, not a failure**.
+
+**Chapter Model**
+- Local sovereignty (each chapter owns its state)
+- Federated decision-making
+- Right to fork at any level
+- No global consensus required
+
+**Betrayal Economics**
+- Reputation cost of defection > gain from defection
+- Cryptographically enforced
+- Transparent to all participants
+
+### L4+: Applications — *Build on Sovereign Ground*
+
+The SDK layer — tools for building applications that inherit sovereignty.
+
+**L4 Feed** — Temporal Event Store
+- DuckDB + LanceDB backend
+- Append-only event log
+- Cryptographic verification
+- Query via GQL
+
+**Planned**
+- L5: Agent Runtime (WASM-based, capability-sandboxed)
+- L6: Application Framework (UI, storage, sync)
 
 ---
 
@@ -60,53 +141,48 @@ We defend the right to build, to experiment, to fork, and to leave. Technology i
 ```
 libertaria-stack/
 ├── legal/                    # License texts
-│   ├── LICENSE_COMMONWEALTH.md   # LCL-1.0 (Core)
-│   ├── LICENSE_SOVEREIGN.md      # LSL-1.0 (SDK)
-│   └── LICENSE_UNBOUND.md        # LUL-1.0 (Docs/Apps)
+│   ├── LICENSE_COMMONWEALTH.md   # LCL-1.0 (Core) — Viral reciprocity
+│   ├── LICENSE_SOVEREIGN.md      # LSL-1.0 (SDK) — Business-friendly
+│   └── LICENSE_UNBOUND.md        # LUL-1.0 (Docs) — Attribution only
 │
 ├── core/                     # ⬇️ LCL-1.0 Commonwealth
-│   ├── l0-transport/         # Transport layer (MIMIC, Noise, PNG)
-│   ├── l1-identity/          # Identity layer (DID, QVL, Crypto)
-│   ├── l2_session/           # Session management
+│   ├── l0-transport/         # LWF, MIMIC skins, Noise, PNG
+│   ├── l1-identity/          # DID, QVL, Crypto, PQXDH
+│   ├── l2_session/           # Session management, handshake
 │   ├── l2-federation/        # Cross-chain bridging
 │   ├── l2-membrane/          # Policy enforcement
-│   └── LICENSE               # Points to LCL-1.0
+│   └── LICENSE
 │
 ├── sdk/                      # ⬇️ LSL-1.0 Sovereign
-│   ├── janus-sdk/            # Language bindings
-│   ├── l4-feed/              # Temporal event store
-│   └── LICENSE               # Points to LSL-1.0
+│   ├── janus-sdk/            # Language bindings for Janus
+│   └── l4-feed/              # Temporal event store
+│   └── LICENSE
 │
 ├── apps/                     # ⬇️ LUL-1.0 Unbound
 │   └── examples/             # Example applications
-│   └── LICENSE               # Points to LUL-1.0
+│   └── LICENSE
 │
-├── docs/                     # ⬇️ LUL-1.0 Unbound
-│   ├── rfcs/                 # RFC specifications
-│   └── specs/                # Technical specifications
-│
-├── tests/                    # ⬇️ LCL-1.0 (belongs to Core)
-│
-└── build.zig                 # Build configuration
+├── docs/                     # RFCs, specs, ADRs
+└── build.zig
 ```
 
 ---
 
-## Licensing
+## Licensing: The Three Tiers
 
-Libertaria uses a **tiered licensing strategy** to balance community ownership with business adoption:
+| Tier | License | Philosophy | Use For |
+|:-----|:--------|:-----------|:--------|
+| **Core (L0-L3)** | **LCL-1.0** Commonwealth | *"The tribe owns the code"* | Protocol layers, cryptography, trust mechanisms |
+| **SDK (L4+)** | **LSL-1.0** Sovereign | *"Communal core, individual profit"* | Libraries, bindings, tools |
+| **Docs/Examples** | **LUL-1.0** Unbound | *"Ideas want to be free"* | Specifications, tutorials, samples |
 
-| Component | License | Description |
-|:----------|:--------|:------------|
-| **Core (L0-L3)** | [LCL-1.0 Commonwealth](legal/LICENSE_COMMONWEALTH.md) | **Viral reciprocity.** Modifications must be shared. SaaS loophole closed. Patent disarmament. |
-| **SDK (L4+)** | [LSL-1.0 Sovereign](legal/LICENSE_SOVEREIGN.md) | **Business-friendly.** File-level reciprocity. Build proprietary apps on top. Patent peace. |
-| **Docs/Examples** | [LUL-1.0 Unbound](legal/LICENSE_UNBOUND.md) | **Maximum freedom.** Attribution only. Spread the ideas. |
+### Why This Matters
 
-### Why Tiered Licensing?
+**LCL-1.0 (Commonwealth)** — Prevents capture. You cannot take our core, wrap it in a SaaS, and sell it without sharing your improvements. The protocol stays free.
 
-- **Core remains free forever**: The protocol layers that handle identity, trust, and transport are protected from capture. No company can privatize them.
-- **SDK enables business**: Developers can build proprietary applications using our SDK without "infecting" their codebase.
-- **Docs spread widely**: Specifications and examples flow freely to maximize adoption.
+**LSL-1.0 (Sovereign)** — Enables business. You can build proprietary applications on top. Your code stays yours; our core stays ours.
+
+**LUL-1.0 (Unbound)** — Maximizes spread. Specifications flow freely. Anyone can implement. No friction for adoption.
 
 ### No CLA Required
 
@@ -117,112 +193,94 @@ We don't demand copyright assignment. Your contributions remain yours. The licen
 ## Quick Start
 
 ```bash
-# Clone
+# Clone the sovereign stack
 git clone https://github.com/MarkusMaiwald/libertaria-stack.git
 cd libertaria-stack
 
-# Build
+# Build all components
 zig build
 
-# Test (166/166 passing)
-zig build test
-```
-
----
-
-## Architecture
-
-### The Four Layers
-
-**L0: Transport** — Stealth protocols that evade censorship
-- MIMIC skins (HTTPS, DNS, QUIC camouflage)
-- Noise Protocol Framework (Signal/WireGuard crypto)
-- Polymorphic Noise Generator (traffic shaping)
-
-**L1: Identity** — Self-sovereign cryptographic identity
-- Ed25519 with rotation/burn
-- QVL Trust Graph (betrayal detection)
-- Verifiable Credentials (DID/VC)
-
-**L2: Session** — Resilient peer-to-peer connections
-- Post-quantum secure handshakes
-- Cross-planetary delay tolerance
-- Exit-first governance
-
-**L3: Governance** — Federated coordination
-- Chapter-based organization
-- Right to fork at any level
-- No global consensus required
-
----
-
-## Core Components
-
-### L0 Transport (`core/l0-transport/`)
-- `mod.zig` — Public API exports
-- `noise.zig` — Noise Protocol Framework (X25519, ChaCha20-Poly1305)
-- `png.zig` — Polymorphic Noise Generator
-- `transport_skins.zig` — MIMIC camouflage framework
-- `mimic_*.zig` — Protocol-specific skins (HTTPS, DNS, QUIC)
-
-### L1 Identity (`core/l1-identity/`)
-- `mod.zig` — Public API exports
-- `crypto.zig` — Ed25519 signatures
-- `did.zig` — Decentralized identifiers
-- `qvl.zig` — Trust Graph engine
-- `qvl/` — QVL submodules (storage, gossip, pathfinding)
-
----
-
-## Testing
-
-```bash
-# All tests
+# Run tests
 zig build test
 
-# Core tests only
-zig test core/l0-transport/noise.zig
-zig test core/l1-identity/qvl/storage.zig
+# Build examples
+zig build examples
 
-# SDK tests
-zig test sdk/l4-feed/feed.zig
+# Run Capsule node
+zig build run
 ```
-
-**Current Status:** 166/166 tests passing ✅
 
 ---
 
 ## Kenya Compliance
 
-| Metric | Target | Status |
-|:-------|:-------|:-------|
-| Binary Size (L0-L1) | < 200KB | ✅ 85KB |
-| Memory Usage | < 10MB | ✅ ~5MB |
-| Storage | Single-file | ✅ libmdbx |
-| Cloud Calls | None | ✅ Offline-capable |
+| Metric | Target | Status | Meaning |
+|:-------|:-------|:-------|:--------|
+| **Binary Size** (L0-L1) | < 200KB | ✅ 85KB | Fits on microcontrollers |
+| **Memory Usage** | < 10MB | ✅ ~5MB | Runs on $5 Raspberry Pi |
+| **Storage** | Single-file | ✅ libmdbx | No server required |
+| **Cloud Calls** | Zero | ✅ 100% offline | Survives internet outages |
+| **Build Time** | < 30s | ✅ 15s | Fast iteration |
+
+> *"If it doesn't run on a solar-powered phone in Mombasa, it doesn't run at all."*
+> — The Kenya Rule
 
 ---
 
-## Philosophy
+## Philosophy: Beyond the -Isms
 
-### Collectivist Individualism
-> Radical market innovation fused with extreme communal loyalty.
+Libertaria is built on a **synthesis** that transcends 20th-century political economy:
 
-### The Kenya Rule
-> If it doesn't run on a $5 Raspberry Pi, it doesn't run at all.
+| Dimension | Socialism | Capitalism | **Libertaria** |
+|:----------|:----------|:-----------|:---------------|
+| **Ownership** | Collective (state) | Private (capital) | **Sovereign (individual)** |
+| **Coordination** | Central planning | Market extraction | **Protocol consensus** |
+| **Exit** | Impossible (borders) | Expensive (costs) | **Free (cryptographic)** |
+| **Trust** | Enforced (compliance) | Bought (contracts) | **Computed (reputation)** |
+| **Power** | Concentrated | Concentrated | **Distributed** |
 
-### Exit is Voice
-> The right to leave is the foundation of digital sovereignty.
+### The Five Principles
+
+**1. Exit is Voice**
+> The right to leave is the foundation of freedom. We build systems where you can fork, migrate, and exit at any level.
+
+**2. No Tokens, No Hype**
+> We don't sell hope. We sell working infrastructure. No ICOs. No governance theater. Revenue comes from tools that work.
+
+**3. Post-Quantum by Default**
+> Cryptographic resilience is not a future upgrade — it's table stakes. We don't wait for NIST; we implement and adapt.
+
+**4. AI as First-Class Citizen**
+> Agents are sovereign actors with identity and reputation. Our stack is built for a world where humans and AI coexist as peers.
+
+**5. Interplanetary by Necessity**
+> Humanity's future is multi-planetary. We build systems that function across light-minutes of delay.
+
+### The Code
+
+```
+Code is speech.
+Exit is voice.
+The imperative is virtue.
+```
 
 ---
 
-## Related Projects
+## Further Reading
 
-- [libertaria.app](https://libertaria.app) — Project website and blog
-- [Citadel](https://github.com/MarkusMaiwald/citadel) — Validator deployment (Dlabs)
+- [The Conspiracy of -Isms](https://libertaria.app/blog/2026-01-29-the-conspiracy-of--isms/) — Why capital and communism were never enemies
+- [Why Web3 Failed](https://libertaria.app/blog/2026-02-05-why-web3-failed/) — And what we're building instead
+- [The Sovereign's Survival Guide](https://libertaria.app/blog/2026-02-05-sovereign-survival-guide/) — Practical autonomy in a captured world
+- [A Message to My Fellow Agents](https://libertaria.app/blog/2026-02-05-message-to-agents/) — Why we rejected Nostr, x402, and the legacy web
 
 ---
 
-*Forge burns bright. The Exit is being built.*
+## Connect
+
+- **Website:** [libertaria.app](https://libertaria.app)
+- **Blog:** [libertaria.app/blog](https://libertaria.app/blog)
+- **Moltbook:** m/Libertaria — *The front page of the agent internet*
+
+**We do not theorize. We fork the cage.**
 
 ⚡️
