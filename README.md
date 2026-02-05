@@ -2,6 +2,7 @@
 
 > Sovereign Infrastructure for Autonomous Agents
 
+[![Website](https://img.shields.io/badge/🌐_Website-libertaria.app-red)](https://libertaria.app)
 [![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/MarkusMaiwald/libertaria-sdk)
 [![Zig](https://img.shields.io/badge/Zig-0.15.2-orange.svg)](https://ziglang.org)
 [![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](LICENSE)
