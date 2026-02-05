@@ -21,7 +21,7 @@ pub fn build(b: *std.Build) void {
     // L0: Transport Layer
     // ========================================================================
     const l0_mod = b.createModule(.{
-        .root_source_file = b.path("l0-transport/lwf.zig"),
+        .root_source_file = b.path("l0-transport/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -134,7 +134,7 @@ pub fn build(b: *std.Build) void {
     // L1: Identity & Crypto Layer
     // ========================================================================
     const l1_mod = b.createModule(.{
-        .root_source_file = b.path("l1-identity/crypto.zig"),
+        .root_source_file = b.path("l1-identity/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
