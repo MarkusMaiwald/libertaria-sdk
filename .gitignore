@@ -18,6 +18,13 @@ test_zig_*
 *.lib
 libqvl_ffi.a
 
+# Build Error Logs
+build_err*
+build_errors.txt
+
+# Random build artifacts
+root
+
 # Operational Reports & Stories
 REPORTS/
 STORIES/

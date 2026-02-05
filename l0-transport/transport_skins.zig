@@ -2,12 +2,14 @@ const std = @import("std");
 const png = @import("png.zig");
 const mimic_dns = @import("mimic_dns.zig");
 const mimic_https = @import("mimic_https.zig");
+const mimic_quic = @import("mimic_quic.zig");
 
 pub const TransportSkin = union(enum) {
     raw: RawSkin,
     mimic_https: MimicHttpsSkin,
     mimic_dns: mimic_dns.MimicDnsSkin,
-    
+    mimic_quic: mimic_quic.MimicQuicSkin,
+
     const Self = @This();
     
     pub fn init(config: SkinConfig) !Self {
@@ -22,6 +24,10 @@ pub const TransportSkin = union(enum) {
                     .png_state = config.png_state,
                 }
             )},
+            .MimicQuic => Self{ .mimic_quic = try mimic_quic.MimicQuicSkin.init(
+                config.allocator,
+                config.png_state
+            )},
         };
     }
     
@@ -30,6 +36,7 @@ pub const TransportSkin = union(enum) {
             .raw => |*skin| skin.deinit(),
             .mimic_https => |*skin| skin.deinit(),
             .mimic_dns => |*skin| skin.deinit(),
+            .mimic_quic => |*skin| skin.deinit(),
         }
     }
     
@@ -38,6 +45,7 @@ pub const TransportSkin = union(enum) {
             .raw => |*skin| skin.wrap(allocator, lwf_frame),
             .mimic_https => |*skin| skin.wrap(allocator, lwf_frame),
             .mimic_dns => |*skin| skin.wrap(allocator, lwf_frame),
+            .mimic_quic => |*skin| skin.wrap(allocator, lwf_frame),
         };
     }
     
@@ -46,6 +54,7 @@ pub const TransportSkin = union(enum) {
             .raw => |*skin| skin.unwrap(allocator, wire_data),
             .mimic_https => |*skin| skin.unwrap(allocator, wire_data),
             .mimic_dns => |*skin| skin.unwrap(allocator, wire_data),
+            .mimic_quic => |*skin| skin.unwrap(allocator, wire_data),
         };
     }
     
@@ -54,6 +63,7 @@ pub const TransportSkin = union(enum) {
             .raw => "RAW",
             .mimic_https => "MIMIC_HTTPS",
             .mimic_dns => "MIMIC_DNS",
+            .mimic_quic => "MIMIC_QUIC",
         };
     }
     
@@ -62,6 +72,7 @@ pub const TransportSkin = union(enum) {
             .raw => 0.0,
             .mimic_https => 0.05,
             .mimic_dns => 0.15, // Higher overhead due to encoding
+            .mimic_quic => 0.08, // Moderate overhead (QUIC headers)
         };
     }
 };
@@ -80,6 +91,7 @@ pub const SkinConfig = struct {
         Raw,
         MimicHttps,
         MimicDns,
+        MimicQuic,
     };
 };
 

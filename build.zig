@@ -88,6 +88,13 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
+    // RFC-0015: MIMIC_QUIC (HTTP/3 over QUIC)
+    const mimic_quic_mod = b.createModule(.{
+        .root_source_file = b.path("l0-transport/mimic_quic.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     const bridge_mod = b.createModule(.{
         .root_source_file = b.path("l2-federation/bridge.zig"),
         .target = target,
@@ -293,6 +300,7 @@ pub fn build(b: *std.Build) void {
     transport_skins_mod.addImport("png", png_mod);
     transport_skins_mod.addImport("mimic_dns", mimic_dns_mod);
     transport_skins_mod.addImport("mimic_https", mimic_https_mod);
+    transport_skins_mod.addImport("mimic_quic", mimic_quic_mod);
 
     // Transport Skins tests
     const png_tests = b.addTest(.{
