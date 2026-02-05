@@ -6,20 +6,21 @@
 
 const std = @import("std");
 
-// Re-export LWF (Libertaria Wire Frame)
-pub const lwf = @import("lwf.zig");
+// LWF types are available directly via the lwf module import
+// (mod.zig IS the lwf module root in build.zig)
+pub const LWFHeader = @import("lwf.zig").LWFHeader;
+pub const LWFFrame = @import("lwf.zig").LWFFrame;
+pub const LWFFlags = @import("lwf.zig").LWFFlags;
+pub const FrameClass = @import("lwf.zig").FrameClass;
 
 // Re-export Time primitives
 pub const time = @import("time.zig");
 
-// Re-export UTCP (UDP Transport)
-pub const utcp = @import("utcp/socket.zig");
+// Note: UTCP is available as a separate module, not re-exported here
+// to avoid circular module dependencies (utcp needs lwf as module import)
 
-// Re-export OPQ (Offline Packet Queue)
-pub const opq = @import("opq.zig");
-
-// Re-export Integrated Service (UTCP + OPQ)
-pub const service = @import("service.zig");
+// Note: opq/service/utcp tested separately via their own modules
+// (avoiding circular module dependencies)
 
 // Re-export Transport Skins (DPI evasion)
 pub const skins = @import("transport_skins.zig");
@@ -46,5 +47,17 @@ pub const relay = @import("relay.zig");
 pub const quarantine = @import("quarantine.zig");
 
 test {
-    std.testing.refAllDecls(@This());
+    // Test individual components that don't have circular import issues
+    // Note: opq/service/utcp tested separately via their own modules
+    _ = time;
+    _ = skins;
+    _ = mimic_https;
+    _ = mimic_dns;
+    _ = mimic_quic;
+    _ = noise;
+    _ = png;
+    _ = dht;
+    _ = gateway;
+    _ = relay;
+    _ = quarantine;
 }

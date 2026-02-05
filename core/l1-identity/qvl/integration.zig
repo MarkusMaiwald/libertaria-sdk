@@ -187,7 +187,7 @@ pub const GraphTransaction = struct {
 
 test "HybridGraph: load and detect betrayal" {
     const allocator = std.testing.allocator;
-    const l0_transport = @import("l0_transport");
+    const time = @import("time");
     
     const path = "/tmp/test_hybrid_db";
     defer std.fs.deleteFileAbsolute(path) catch {};
@@ -201,7 +201,7 @@ test "HybridGraph: load and detect betrayal" {
     defer hybrid.deinit();
     
     // Add edges forming negative cycle (sum of risks must be < 0)
-    const ts = l0_transport.time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
+    const ts = time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
     const expires = ts.addSeconds(86400);
     // Trust edges (negative risk = good)
     try hybrid.addEdge(.{ .from = 0, .to = 1, .risk = -0.7, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
@@ -219,7 +219,7 @@ test "HybridGraph: load and detect betrayal" {
 
 test "GraphTransaction: commit and rollback" {
     const allocator = std.testing.allocator;
-    const l0_transport = @import("l0_transport");
+    const time = @import("time");
     
     const path = "/tmp/test_tx_db";
     defer std.fs.deleteFileAbsolute(path) catch {};
@@ -235,7 +235,7 @@ test "GraphTransaction: commit and rollback" {
     defer txn.deinit();
     
     // Add edges
-    const ts = l0_transport.time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
+    const ts = time.SovereignTimestamp.fromSeconds(1234567890, .system_boot);
     const expires = ts.addSeconds(86400);
     try txn.addEdge(.{ .from = 0, .to = 1, .risk = -0.3, .timestamp = ts, .nonce = 0, .level = 3, .expires_at = expires });
     try txn.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = ts, .nonce = 1, .level = 3, .expires_at = expires });

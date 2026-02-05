@@ -66,7 +66,13 @@ pub const HolePunchCoordination = struct {
 test "Gateway: register and coordinate" {
     const allocator = std.testing.allocator;
 
-    var gw = Gateway.init(allocator);
+    // Create a mock DHT service for testing
+    var self_id = [_]u8{0} ** 32;
+    self_id[0] = 0xAB;
+    var dht_service = dht.DhtService.init(allocator, self_id);
+    defer dht_service.deinit();
+
+    var gw = Gateway.init(allocator, &dht_service);
     defer gw.deinit();
 
     var peer_a_id = [_]u8{0} ** 32;

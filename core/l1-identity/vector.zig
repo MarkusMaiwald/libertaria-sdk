@@ -17,7 +17,7 @@
 //! - Nonce (8 bytes)
 
 const std = @import("std");
-const l0_transport = @import("l0_transport");
+const time = @import("time");
 const proof_of_path = @import("proof_of_path.zig");
 const soulkey = @import("soulkey.zig");
 const entropy = @import("entropy.zig");
@@ -88,7 +88,7 @@ pub const QuasarVector = struct {
     entropy_stamps: std.ArrayListUnmanaged(entropy.EntropyStamp), // PoW
 
     // === Metadata ===
-    created_at: l0_transport.time.SovereignTimestamp, // Creation time
+    created_at: time.SovereignTimestamp, // Creation time
     graphology: GraphologyMeta,
     nonce: u64, // Replay protection
 
@@ -104,7 +104,7 @@ pub const QuasarVector = struct {
             .signature = [_]u8{0} ** 64,
             .trust_path = null,
             .entropy_stamps = .{},
-            .created_at = l0_transport.time.SovereignTimestamp.now(),
+            .created_at = time.SovereignTimestamp.now(),
             .graphology = std.mem.zeroes(GraphologyMeta),
             .nonce = std.crypto.random.int(u64), // Secure random nonce
             .allocator = allocator,
@@ -161,7 +161,7 @@ pub const QuasarVector = struct {
         if (!self.verifySignature()) return .invalid_signature;
 
         // 2. Time Check
-        const now = l0_transport.time.SovereignTimestamp.now();
+        const now = time.SovereignTimestamp.now();
         switch (self.created_at.validateForVector(now)) {
             .valid => {},
             .too_far_future => return .future_timestamp,

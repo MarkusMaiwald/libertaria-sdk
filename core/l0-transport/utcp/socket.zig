@@ -1,7 +1,7 @@
 //! RFC-0004: UTCP (Unreliable Transport Protocol) over UDP
 
 const std = @import("std");
-const lwf = @import("../lwf.zig");
+const lwf = @import("lwf");
 const posix = std.posix;
 
 /// UTCP Socket abstraction for sending and receiving LWF frames

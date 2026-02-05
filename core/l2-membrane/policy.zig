@@ -11,8 +11,7 @@
 //! Implementation: High-performance Zig (Hardware-close).
 
 const std = @import("std");
-const l0_transport = @import("l0_transport");
-const lwf = l0_transport.lwf;
+const lwf = @import("lwf");
 
 pub const PolicyDecision = enum {
     drop, // Silently discard

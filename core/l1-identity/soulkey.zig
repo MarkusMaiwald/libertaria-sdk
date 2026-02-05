@@ -14,7 +14,7 @@
 
 const std = @import("std");
 const crypto = std.crypto;
-const pqxdh = @import("pqxdh.zig");
+const pqxdh = @import("pqxdh");
 
 // ============================================================================
 // SoulKey: Core Identity Keypair

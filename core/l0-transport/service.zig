@@ -9,9 +9,9 @@
 //! Orchestrates the flow: [Network] -> [UTCP] -> [OPQ] -> [Application]
 
 const std = @import("std");
-const utcp = @import("./utcp/socket.zig");
-const opq = @import("./opq.zig");
-const lwf = @import("./lwf.zig");
+const utcp = @import("utcp");
+const opq = @import("opq");
+const lwf = @import("lwf");
 
 pub const L0Service = struct {
     allocator: std.mem.Allocator,

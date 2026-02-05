@@ -3,9 +3,9 @@
 //! Extends RFC-0120 TrustEdge with risk scoring for Bellman-Ford.
 
 const std = @import("std");
-const l0_transport = @import("l0_transport");
+const time = @import("time");
 
-const SovereignTimestamp = l0_transport.time.SovereignTimestamp;
+const SovereignTimestamp = time.SovereignTimestamp;
 
 /// Node identifier (compact u32 index into DID storage)
 pub const NodeId = u32;
