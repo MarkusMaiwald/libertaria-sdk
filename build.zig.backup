@@ -12,7 +12,7 @@ pub fn build(b: *std.Build) void {
     // Time Module (L0)
     // ========================================================================
     const time_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/time.zig"),
+        .root_source_file = b.path("l0-transport/time.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -21,18 +21,18 @@ pub fn build(b: *std.Build) void {
     // L0: Transport Layer
     // ========================================================================
     const l0_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/mod.zig"),
+        .root_source_file = b.path("l0-transport/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
     const ipc_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/ipc/client.zig"),
+        .root_source_file = b.path("l0-transport/ipc/client.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const utcp_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/utcp/socket.zig"),
+        .root_source_file = b.path("l0-transport/utcp/socket.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -40,14 +40,14 @@ pub fn build(b: *std.Build) void {
     utcp_mod.addImport("lwf", l0_mod);
 
     const opq_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/opq.zig"),
+        .root_source_file = b.path("l0-transport/opq.zig"),
         .target = target,
         .optimize = optimize,
     });
     opq_mod.addImport("lwf", l0_mod);
 
     const l0_service_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/service.zig"),
+        .root_source_file = b.path("l0-transport/service.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -56,53 +56,53 @@ pub fn build(b: *std.Build) void {
     l0_service_mod.addImport("opq", opq_mod);
 
     const dht_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/dht.zig"),
+        .root_source_file = b.path("l0-transport/dht.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const gateway_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/gateway.zig"),
+        .root_source_file = b.path("l0-transport/gateway.zig"),
         .target = target,
         .optimize = optimize,
     });
     gateway_mod.addImport("dht", dht_mod);
 
     const relay_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/relay.zig"),
+        .root_source_file = b.path("l0-transport/relay.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     // RFC-0015: Transport Skins (MIMIC_DNS for DPI evasion)
     const mimic_dns_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/mimic_dns.zig"),
+        .root_source_file = b.path("l0-transport/mimic_dns.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     // RFC-0015: MIMIC_HTTPS with Domain Fronting
     const mimic_https_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/mimic_https.zig"),
+        .root_source_file = b.path("l0-transport/mimic_https.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     // RFC-0015: MIMIC_QUIC (HTTP/3 over QUIC)
     const mimic_quic_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/mimic_quic.zig"),
+        .root_source_file = b.path("l0-transport/mimic_quic.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const bridge_mod = b.createModule(.{
-        .root_source_file = b.path("core/l2-federation/bridge.zig"),
+        .root_source_file = b.path("l2-federation/bridge.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const l2_policy_mod = b.createModule(.{
-        .root_source_file = b.path("core/l2-membrane/policy.zig"),
+        .root_source_file = b.path("l2-membrane/policy.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -134,7 +134,7 @@ pub fn build(b: *std.Build) void {
     // L1: Identity & Crypto Layer
     // ========================================================================
     const l1_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/mod.zig"),
+        .root_source_file = b.path("l1-identity/mod.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -147,7 +147,7 @@ pub fn build(b: *std.Build) void {
     // L1 PQXDH Module (Phase 3) - Core Dependency
     // ========================================================================
     const l1_pqxdh_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/pqxdh.zig"),
+        .root_source_file = b.path("l1-identity/pqxdh.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -162,7 +162,7 @@ pub fn build(b: *std.Build) void {
     // L1 Modules: SoulKey, Entropy, Prekey (Phase 2B + 2C)
     // ========================================================================
     const l1_soulkey_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/soulkey.zig"),
+        .root_source_file = b.path("l1-identity/soulkey.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -170,7 +170,7 @@ pub fn build(b: *std.Build) void {
     l1_soulkey_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     const l1_entropy_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/entropy.zig"),
+        .root_source_file = b.path("l1-identity/entropy.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -179,14 +179,14 @@ pub fn build(b: *std.Build) void {
     utcp_mod.addImport("entropy", l1_entropy_mod);
 
     const l1_prekey_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/prekey.zig"),
+        .root_source_file = b.path("l1-identity/prekey.zig"),
         .target = target,
         .optimize = optimize,
     });
     l1_prekey_mod.addImport("pqxdh", l1_pqxdh_mod);
 
     const l1_did_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/did.zig"),
+        .root_source_file = b.path("l1-identity/did.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -196,14 +196,14 @@ pub fn build(b: *std.Build) void {
     // L1 Slash Protocol & L0 Quarantine
     // ========================================================================
     const l1_slash_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/slash.zig"),
+        .root_source_file = b.path("l1-identity/slash.zig"),
         .target = target,
         .optimize = optimize,
     });
     l1_mod.addImport("slash", l1_slash_mod);
 
     const l0_quarantine_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/quarantine.zig"),
+        .root_source_file = b.path("l0-transport/quarantine.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -214,7 +214,7 @@ pub fn build(b: *std.Build) void {
     // L1 Trust Graph Module (Core Dependency for QVL/PoP)
     // ========================================================================
     const l1_trust_graph_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/trust_graph.zig"),
+        .root_source_file = b.path("l1-identity/trust_graph.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -225,7 +225,7 @@ pub fn build(b: *std.Build) void {
     // L1 Proof of Path Module (PoP)
     // ========================================================================
     const l1_pop_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/proof_of_path.zig"),
+        .root_source_file = b.path("l1-identity/proof_of_path.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -237,7 +237,7 @@ pub fn build(b: *std.Build) void {
     // L1 QVL (Quasar Vector Lattice) - Advanced Graph Engine
     // ========================================================================
     const l1_qvl_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/qvl.zig"),
+        .root_source_file = b.path("l1-identity/qvl.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -249,7 +249,7 @@ pub fn build(b: *std.Build) void {
 
     // QVL FFI (C ABI exports for L2 integration)
     const l1_qvl_ffi_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/qvl_ffi.zig"),
+        .root_source_file = b.path("l1-identity/qvl_ffi.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -271,7 +271,7 @@ pub fn build(b: *std.Build) void {
     // L4 Feed — Temporal Event Store
     // ========================================================================
     const l4_feed_mod = b.createModule(.{
-        .root_source_file = b.path("sdk/l4-feed/feed.zig"),
+        .root_source_file = b.path("l4-feed/feed.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -287,13 +287,13 @@ pub fn build(b: *std.Build) void {
     // RFC-0015: Transport Skins (DPI Resistance)
     // ========================================================================
     const png_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/png.zig"),
+        .root_source_file = b.path("l0-transport/png.zig"),
         .target = target,
         .optimize = optimize,
     });
 
     const transport_skins_mod = b.createModule(.{
-        .root_source_file = b.path("core/l0-transport/transport_skins.zig"),
+        .root_source_file = b.path("l0-transport/transport_skins.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -445,7 +445,7 @@ pub fn build(b: *std.Build) void {
     // Import PQXDH into main L1 module
     // Tests (root is test_pqxdh.zig)
     const l1_pqxdh_tests_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/test_pqxdh.zig"),
+        .root_source_file = b.path("l1-identity/test_pqxdh.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -461,7 +461,7 @@ pub fn build(b: *std.Build) void {
 
     // L1 Vector tests (Phase 3C)
     const l1_vector_mod = b.createModule(.{
-        .root_source_file = b.path("core/l1-identity/vector.zig"),
+        .root_source_file = b.path("l1-identity/vector.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -543,11 +543,11 @@ pub fn build(b: *std.Build) void {
 
     // Example: LWF frame usage
     const lwf_example_mod = b.createModule(.{
-        .root_source_file = b.path("apps/examples/lwf_example.zig"),
+        .root_source_file = b.path("examples/lwf_example.zig"),
         .target = target,
         .optimize = optimize,
     });
-    lwf_example_mod.addImport("l0_transport", l0_mod);
+    lwf_example_mod.addImport("../l0-transport/lwf.zig", l0_mod);
 
     const lwf_example = b.addExecutable(.{
         .name = "lwf_example",
@@ -557,11 +557,11 @@ pub fn build(b: *std.Build) void {
 
     // Example: Encryption usage
     const crypto_example_mod = b.createModule(.{
-        .root_source_file = b.path("apps/examples/crypto_example.zig"),
+        .root_source_file = b.path("examples/crypto_example.zig"),
         .target = target,
         .optimize = optimize,
     });
-    crypto_example_mod.addImport("l1_identity", l1_mod);
+    crypto_example_mod.addImport("../l1-identity/crypto.zig", l1_mod);
 
     const crypto_example = b.addExecutable(.{
         .name = "crypto_example",

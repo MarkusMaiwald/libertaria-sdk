@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: LCL-1.0
+// Copyright (c) 2026 Libertaria Contributors
+// This file is part of the Libertaria Core, licensed under
+// The Libertaria Commonwealth License v1.0.
+
+
 //! RFC-0000: Libertaria Wire Frame Protocol (v2)
 //!
 //! This module implements the core LWF frame structure for L0 transport.

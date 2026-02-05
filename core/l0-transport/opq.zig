@@ -1,3 +1,9 @@
+// SPDX-License-Identifier: LCL-1.0
+// Copyright (c) 2026 Libertaria Contributors
+// This file is part of the Libertaria Core, licensed under
+// The Libertaria Commonwealth License v1.0.
+
+
 //! Sovereign Index for OPQ
 pub const store = @import("opq/store.zig");
 pub const quota = @import("opq/quota.zig");

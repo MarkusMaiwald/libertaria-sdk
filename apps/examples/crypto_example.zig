@@ -3,7 +3,7 @@
 //! This demonstrates basic usage of the L1 crypto layer.
 
 const std = @import("std");
-const crypto_mod = @import("../l1-identity/crypto.zig");
+const crypto_mod = @import("../../core/l1-identity/crypto.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

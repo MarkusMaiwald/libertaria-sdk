@@ -1,11 +1,12 @@
-# Libertaria SDK
+# Libertaria Stack
 
 > Sovereign Infrastructure for Autonomous Agents
 
 [![Website](https://img.shields.io/badge/🌐_Website-libertaria.app-red)](https://libertaria.app)
-[![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/MarkusMaiwald/libertaria-sdk)
+[![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/MarkusMaiwald/libertaria-stack)
 [![Zig](https://img.shields.io/badge/Zig-0.15.2-orange.svg)](https://ziglang.org)
-[![License](https://img.shields.io/badge/license-MIT%20%2B%20Commons%20Clause-blue)](LICENSE)
+[![License](https://img.shields.io/badge/Core-LCL--1.0_Community-red)](#licensing)
+[![License](https://img.shields.io/badge/SDK-LSL--1.0_Sovereign-gold)](#licensing)
 
 **Sovereign; Kinetic; Anti-Fragile.**
 
@@ -52,13 +53,64 @@ Cryptographic proof, not platform promises. Reputation graphs, not follower coun
 **11. Code is Speech, Exit is Voice**
 We defend the right to build, to experiment, to fork, and to leave. Technology is a tool of liberation — never of control.
 
-### This SDK
+---
 
-This repository implements the **L1 Identity Layer** with:
-- Ed25519 sovereign identities with rotation/burn
-- Trust Graph (QVL) with betrayal detection
-- GQL (ISO/IEC 39075:2024 compliant) query interface
-- Persistent storage with Kenya Rule compliance
+## Repository Structure
+
+```
+libertaria-stack/
+├── legal/                    # License texts
+│   ├── LICENSE_COMMONWEALTH.md   # LCL-1.0 (Core)
+│   ├── LICENSE_SOVEREIGN.md      # LSL-1.0 (SDK)
+│   └── LICENSE_UNBOUND.md        # LUL-1.0 (Docs/Apps)
+│
+├── core/                     # ⬇️ LCL-1.0 Commonwealth
+│   ├── l0-transport/         # Transport layer (MIMIC, Noise, PNG)
+│   ├── l1-identity/          # Identity layer (DID, QVL, Crypto)
+│   ├── l2_session/           # Session management
+│   ├── l2-federation/        # Cross-chain bridging
+│   ├── l2-membrane/          # Policy enforcement
+│   └── LICENSE               # Points to LCL-1.0
+│
+├── sdk/                      # ⬇️ LSL-1.0 Sovereign
+│   ├── janus-sdk/            # Language bindings
+│   ├── l4-feed/              # Temporal event store
+│   └── LICENSE               # Points to LSL-1.0
+│
+├── apps/                     # ⬇️ LUL-1.0 Unbound
+│   └── examples/             # Example applications
+│   └── LICENSE               # Points to LUL-1.0
+│
+├── docs/                     # ⬇️ LUL-1.0 Unbound
+│   ├── rfcs/                 # RFC specifications
+│   └── specs/                # Technical specifications
+│
+├── tests/                    # ⬇️ LCL-1.0 (belongs to Core)
+│
+└── build.zig                 # Build configuration
+```
+
+---
+
+## Licensing
+
+Libertaria uses a **tiered licensing strategy** to balance community ownership with business adoption:
+
+| Component | License | Description |
+|:----------|:--------|:------------|
+| **Core (L0-L3)** | [LCL-1.0 Commonwealth](legal/LICENSE_COMMONWEALTH.md) | **Viral reciprocity.** Modifications must be shared. SaaS loophole closed. Patent disarmament. |
+| **SDK (L4+)** | [LSL-1.0 Sovereign](legal/LICENSE_SOVEREIGN.md) | **Business-friendly.** File-level reciprocity. Build proprietary apps on top. Patent peace. |
+| **Docs/Examples** | [LUL-1.0 Unbound](legal/LICENSE_UNBOUND.md) | **Maximum freedom.** Attribution only. Spread the ideas. |
+
+### Why Tiered Licensing?
+
+- **Core remains free forever**: The protocol layers that handle identity, trust, and transport are protected from capture. No company can privatize them.
+- **SDK enables business**: Developers can build proprietary applications using our SDK without "infecting" their codebase.
+- **Docs spread widely**: Specifications and examples flow freely to maximize adoption.
+
+### No CLA Required
+
+We don't demand copyright assignment. Your contributions remain yours. The licenses ensure reciprocity without requiring you to "sign your soul away."
 
 ---
 
@@ -66,8 +118,8 @@ This repository implements the **L1 Identity Layer** with:
 
 ```bash
 # Clone
-git clone https://github.com/MarkusMaiwald/libertaria-sdk.git
-cd libertaria-sdk
+git clone https://github.com/MarkusMaiwald/libertaria-stack.git
+cd libertaria-stack
 
 # Build
 zig build
@@ -80,70 +132,45 @@ zig build test
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                    Application Layer                         │
-├─────────────────────────────────────────────────────────────┤
-│                    Libertaria SDK                            │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
-│  │   Identity   │  │  Trust Graph │  │    GQL       │      │
-│  │  (identity)  │  │    (qvl)     │  │  (gql/*.zig) │      │
-│  └──────────────┘  └──────────────┘  └──────────────┘      │
-├─────────────────────────────────────────────────────────────┤
-│                    Janus Standard Library                    │
-├─────────────────────────────────────────────────────────────┤
-│                    Janus Compiler (:service)                 │
-└─────────────────────────────────────────────────────────────┘
-```
+### The Four Layers
+
+**L0: Transport** — Stealth protocols that evade censorship
+- MIMIC skins (HTTPS, DNS, QUIC camouflage)
+- Noise Protocol Framework (Signal/WireGuard crypto)
+- Polymorphic Noise Generator (traffic shaping)
+
+**L1: Identity** — Self-sovereign cryptographic identity
+- Ed25519 with rotation/burn
+- QVL Trust Graph (betrayal detection)
+- Verifiable Credentials (DID/VC)
+
+**L2: Session** — Resilient peer-to-peer connections
+- Post-quantum secure handshakes
+- Cross-planetary delay tolerance
+- Exit-first governance
+
+**L3: Governance** — Federated coordination
+- Chapter-based organization
+- Right to fork at any level
+- No global consensus required
 
 ---
 
-## Modules
+## Core Components
 
-### Identity (`l1-identity/`)
-- `crypto.zig` — Ed25519 signatures, key rotation
+### L0 Transport (`core/l0-transport/`)
+- `mod.zig` — Public API exports
+- `noise.zig` — Noise Protocol Framework (X25519, ChaCha20-Poly1305)
+- `png.zig` — Polymorphic Noise Generator
+- `transport_skins.zig` — MIMIC camouflage framework
+- `mimic_*.zig` — Protocol-specific skins (HTTPS, DNS, QUIC)
+
+### L1 Identity (`core/l1-identity/`)
+- `mod.zig` — Public API exports
+- `crypto.zig` — Ed25519 signatures
 - `did.zig` — Decentralized identifiers
-- `soulkey.zig` — Deterministic key derivation
-- `entropy.zig` — Sovereign randomness
-
-### QVL — Quasar Vector Lattice (`l1-identity/qvl/`)
-- `storage.zig` — PersistentGraph with libmdbx
-- `betrayal.zig` — Bellman-Ford negative cycle detection
-- `pathfinding.zig` — A* trust path discovery
-- `feed.zig` — L4 temporal event store (DuckDB + LanceDB)
-- `gql/` — ISO/IEC 39075:2024 Graph Query Language
-  - `lexer.zig` — Tokenizer
-  - `parser.zig` — Recursive descent parser
-  - `ast.zig` — Abstract syntax tree
-  - `codegen.zig` — GQL → Zig transpiler
-
----
-
-## GQL Example
-
-```zig
-const gql = @import("qvl").gql;
-
-// Parse GQL query
-const query_str = "MATCH (n:Identity)-[t:TRUST]->(m) WHERE n.did = 'alice' RETURN m";
-var query = try gql.parse(allocator, query_str);
-defer query.deinit();
-
-// Transpile to Zig code
-const zig_code = try gql.generateZig(allocator, query);
-defer allocator.free(zig_code);
-```
-
----
-
-## Kenya Compliance
-
-| Metric | Target | Status |
-|--------|--------|--------|
-| Binary Size (L1) | < 200KB | ✅ 85KB |
-| Memory Usage | < 10MB | ✅ ~5MB |
-| Storage | Single-file | ✅ libmdbx |
-| Cloud Calls | None | ✅ Offline-capable |
+- `qvl.zig` — Trust Graph engine
+- `qvl/` — QVL submodules (storage, gossip, pathfinding)
 
 ---
 
@@ -153,20 +180,26 @@ defer allocator.free(zig_code);
 # All tests
 zig build test
 
-# Specific module
-zig test l1-identity/qvl/gql/lexer.zig
-zig test l1-identity/qvl/storage.zig
+# Core tests only
+zig test core/l0-transport/noise.zig
+zig test core/l1-identity/qvl/storage.zig
+
+# SDK tests
+zig test sdk/l4-feed/feed.zig
 ```
 
 **Current Status:** 166/166 tests passing ✅
 
 ---
 
-## Related Projects
+## Kenya Compliance
 
-- [Janus Language](https://github.com/janus-lang/janus) — The foundation
-- [libertaria.blog](https://github.com/MarkusMaiwald/libertaria-blog) — This project's blog
-- [libertaria.bot](https://github.com/MarkusMaiwald/libertaria-bot) — Agent marketplace (coming soon)
+| Metric | Target | Status |
+|:-------|:-------|:-------|
+| Binary Size (L0-L1) | < 200KB | ✅ 85KB |
+| Memory Usage | < 10MB | ✅ ~5MB |
+| Storage | Single-file | ✅ libmdbx |
+| Cloud Calls | None | ✅ Offline-capable |
 
 ---
 
@@ -183,11 +216,10 @@ zig test l1-identity/qvl/storage.zig
 
 ---
 
-## License
+## Related Projects
 
-MIT License + Libertaria Commons Clause
-
-See [LICENSE](LICENSE) for details.
+- [libertaria.app](https://libertaria.app) — Project website and blog
+- [Citadel](https://github.com/MarkusMaiwald/citadel) — Validator deployment (Dlabs)
 
 ---
 

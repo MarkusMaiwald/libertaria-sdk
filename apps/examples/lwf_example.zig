@@ -3,7 +3,7 @@
 //! This demonstrates basic usage of the L0 transport layer.
 
 const std = @import("std");
-const lwf = @import("../l0-transport/lwf.zig");
+const lwf = @import("../../core/l0-transport/lwf.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
