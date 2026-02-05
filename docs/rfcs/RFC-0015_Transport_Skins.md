@@ -336,6 +336,8 @@ Relay  → Client: ServerHello (only if PoW valid)
 - [ ] MIMIC_HTTPS skin (WebSocket + TLS)
 - [ ] utls fingerprint parroting
 - [ ] Automatic probe selection
+- [ ] Noise Protocol Framework (X25519, ChaCha20-Poly1305)
+- [ ] Noise_XX handshake implementation
 
 ### Phase 2: Deep Bypass (Sprint 6)
 - [ ] MIMIC_DNS skin (DoH tunnel)
@@ -348,6 +350,113 @@ Relay  → Client: ServerHello (only if PoW valid)
 - [ ] Distribution matching from real captures
 - [ ] Steganography (generative only)
 - [ ] Formal security audit
+
+---
+
+## Noise Protocol Framework Integration
+
+### Overview
+Transport Skins provide **camouflage** — they make traffic look like benign protocols. But camouflage without encryption is just obfuscation. We integrate the **Noise Protocol Framework** (noiseprotocol.org) to provide modern, lightweight cryptographic security.
+
+**Why Noise?**
+- Used by Signal, WireGuard, and other production systems
+- Simple, auditable state machine
+- No cipher agility attacks (one cipher suite per pattern)
+- Forward secrecy + identity hiding built-in
+
+### Architecture: Noise + MIMIC
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│              NOISE + MIMIC INTEGRATION                      │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  Application Layer                                           │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  NOISE PROTOCOL (cryptographic security)              │  │
+│  │  • X25519 key exchange                                │  │
+│  │  • ChaCha20-Poly1305 AEAD                             │  │
+│  │  • XX, IK, NN patterns                                │  │
+│  └───────────────────────────────────────────────────────┘  │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  POLYMORPHIC NOISE GENERATOR (traffic shaping)        │  │
+│  │  • Packet size padding                                │  │
+│  │  • Timing jitter                                      │  │
+│  │  • Dummy injection                                    │  │
+│  └───────────────────────────────────────────────────────┘  │
+│       │                                                      │
+│       ▼                                                      │
+│  ┌───────────────────────────────────────────────────────┐  │
+│  │  TRANSPORT SKIN (protocol camouflage)                 │  │
+│  │  • MIMIC_HTTPS (WebSocket/TLS)                        │  │
+│  │  • MIMIC_DNS (DoH tunnel)                             │  │
+│  │  • MIMIC_QUIC (HTTP/3)                                │  │
+│  └───────────────────────────────────────────────────────┘  │
+│       │                                                      │
+│       ▼                                                      │
+│  NETWORK (DPI sees only the skin's traffic pattern)         │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Supported Patterns
+
+| Pattern | Use Case | Properties |
+|---------|----------|------------|
+| **Noise_XX** | General purpose | Mutual authentication, identity hiding |
+| **Noise_IK** | Client-to-server (known key) | 0-RTT, initiator authentication deferred |
+| **Noise_NN** | Ephemeral-only | No authentication, encryption only |
+
+### Handshake Example: Noise_XX
+
+```
+Initiator                          Responder
+─────────────────────────────────────────────────
+Generate e
+
+   ───── e ─────────────────────>
+
+                                  Receive e
+                                  Generate e
+                                  DH(e, re)
+
+   <──── e, ee, s, es ──────────
+
+Receive e
+DH(e, re)
+Decrypt s
+DH(s, re)
+
+   ───── s, se ────────────────>
+
+                                  Receive s
+                                  DH(e, rs)
+                                  DH(s, rs)
+                                  Split()
+
+Split()  ───────────────────────  Transport Ready
+```
+
+### Security Properties
+
+| Property | Noise_XX | Noise_IK | Provided By |
+|----------|----------|----------|-------------|
+| **Forward Secrecy** | ✅ | ⚠️ (deferred) | Ephemeral DH |
+| **Identity Hiding** | ✅ Initiator | ❌ | XX pattern order |
+| **Mutual Auth** | ✅ | ✅ | Static key exchange |
+| **0-RTT Encryption** | ❌ | ✅ | Pre-shared responder key |
+| **KCI Resistance** | ✅ | ⚠️ | Key compromise impersonation |
+
+### Integration Benefits
+
+1. **Camouflage + Security:** MIMIC skins fool DPI; Noise encryption ensures confidentiality
+2. **Forward Secrecy:** Even if static keys are compromised, past sessions remain secure
+3. **Identity Hiding:** Static public keys are encrypted during handshake
+4. **Lightweight:** ~2KB RAM per session; suitable for Kenya-class devices
 
 ---
 
@@ -386,6 +495,8 @@ Relay  → Client: ServerHello (only if PoW valid)
 3. **Conjure:** [refraction.network](https://refraction.network/) — Refraction networking
 4. **ECH:** RFC 9446 — Encrypted Client Hello
 5. **DoH:** RFC 8484 — DNS over HTTPS
+6. **Noise Protocol:** [noiseprotocol.org](https://noiseprotocol.org/) — Modern crypto framework
+7. **WireGuard:** [wireguard.com](https://www.wireguard.com/) — Noise_IK in production
 
 ---
 
