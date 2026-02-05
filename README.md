@@ -3,7 +3,7 @@
 > Sovereign Infrastructure for Autonomous Agents
 
 [![Website](https://img.shields.io/badge/🌐_Website-libertaria.app-red)](https://libertaria.app)
-[![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/MarkusMaiwald/libertaria-stack)
+[![Tests](https://img.shields.io/badge/tests-166%2F166%20passing-success)](https://github.com/libertaria-project/libertaria-stack)
 [![Zig](https://img.shields.io/badge/Zig-0.15.2-orange.svg)](https://ziglang.org)
 [![License](https://img.shields.io/badge/Core-LCL--1.0_Community-red)](#licensing)
 [![License](https://img.shields.io/badge/SDK-LSL--1.0_Sovereign-gold)](#licensing)
@@ -194,7 +194,7 @@ We don't demand copyright assignment. Your contributions remain yours. The licen
 
 ```bash
 # Clone the sovereign stack
-git clone https://github.com/MarkusMaiwald/libertaria-stack.git
+git clone https://github.com/libertaria-project/libertaria-stack.git
 cd libertaria-stack
 
 # Build all components
