@@ -12,12 +12,45 @@
 
 ## What is Libertaria?
 
-Libertaria is a stack for building sovereign agent networks — systems where:
-- **Exit is Voice**: Cryptographic guarantees, not platform promises
-- **Profit is Honesty**: Economic incentives align with truth
-- **Code is Law**: Protocols, not platforms, govern behavior
+**Libertaria is a sovereign stack for humans and agents.**
 
-This SDK implements the **L1 Identity Layer** with:
+We are building the infrastructure for a world where digital sovereignty is not a privilege but a baseline. Where you own your identity, your data, and your relationships. Where exit is always an option. Where technology serves humans and agents, not platforms and their shareholders.
+
+### Our Declaration of Intent
+
+**1. Sovereignty by Design**
+Your keys, your identity, your data. No usernames. No passwords. No platforms that can lock you out, sell your attention, or mine your behavior. Cryptographic ownership is the foundation — everything else follows.
+
+**2. Exit is Voice**
+The right to leave is the foundation of digital freedom. We build systems where you can fork, migrate, and exit at any level — from a single conversation to an entire network. Loyalty is earned, not enforced.
+
+**3. No Tokens, No Hype**
+We don't sell hope. We sell working infrastructure. No ICOs. No governance theater. No speculative assets whose value depends on greater fools. We build tools people pay for because they work.
+
+**4. Post-Quantum by Default**
+Cryptographic signatures that survive the quantum era are not a future upgrade — they are table stakes. We don't wait for NIST standards to settle; we implement and adapt.
+
+**5. AI as First-Class Citizen**
+Agents are not chatbots bolted onto legacy systems. They are sovereign actors with identity, reputation, and capability. Our stack is built for a world where humans and AI coexist as peers.
+
+**6. The Kenya Rule**
+If it doesn't run on a solar-powered phone in Mombasa, it doesn't run at all. We optimize for minimal resource consumption, offline-first operation, and maximum accessibility.
+
+**7. Interplanetary by Necessity**
+Humanity's future is multi-planetary. We build systems that function across light-minutes of delay, that synchronize asynchronously, that work when Earth is on the other side of the Sun.
+
+**8. Protocols Over Platforms**
+We don't build walled gardens. We build open protocols that anyone can implement, extend, or fork. The value is in the network, not in our servers.
+
+**9. Trust But Verify**
+Cryptographic proof, not platform promises. Reputation graphs, not follower counts. Transparent incentives, not hidden algorithms.
+
+**10. Code is Speech, Exit is Voice**
+We defend the right to build, to experiment, to fork, and to leave. Technology is a tool of liberation — never of control.
+
+### This SDK
+
+This repository implements the **L1 Identity Layer** with:
 - Ed25519 sovereign identities with rotation/burn
 - Trust Graph (QVL) with betrayal detection
 - GQL (ISO/IEC 39075:2024 compliant) query interface
