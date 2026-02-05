@@ -13,7 +13,7 @@ const types = @import("types.zig");
 const pathfinding = @import("pathfinding.zig");
 // Import proof_of_path relative from qvl directory
 const pop = @import("../proof_of_path.zig");
-const trust_graph = @import("trust_graph");
+const trust_graph = @import("../trust_graph.zig");
 
 const NodeId = types.NodeId;
 const RiskGraph = types.RiskGraph;

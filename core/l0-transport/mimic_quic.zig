@@ -22,7 +22,7 @@
 //! - RFC 9293: Connection Migration
 
 const std = @import("std");
-const png = @import("png.zig");
+const png = @import("./png.zig");
 
 /// QUIC Header Types
 const QuicHeaderType = enum {

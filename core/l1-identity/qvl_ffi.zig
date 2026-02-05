@@ -9,18 +9,19 @@
 //! Thread Safety: Single-threaded only (initial version)
 
 const std = @import("std");
+const l0_transport = @import("l0_transport");
+
 const qvl = @import("qvl.zig");
 const pop_mod = @import("proof_of_path.zig");
-const trust_graph = @import("trust_graph");
-const time = @import("time");
-const slash = @import("slash");
+const trust_graph = @import("trust_graph.zig");
+const slash = @import("slash.zig");
 
 const RiskGraph = qvl.types.RiskGraph;
 const RiskEdge = qvl.types.RiskEdge;
 const ReputationMap = qvl.pop.ReputationMap;
 const ProofOfPath = pop_mod.ProofOfPath;
 const PathVerdict = pop_mod.PathVerdict;
-const SovereignTimestamp = time.SovereignTimestamp;
+const SovereignTimestamp = l0_transport.time.SovereignTimestamp;
 
 // ============================================================================
 // OPAQUE CONTEXT

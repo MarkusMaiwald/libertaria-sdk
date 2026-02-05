@@ -4,7 +4,7 @@
 //! for prioritized resource allocation.
 
 const std = @import("std");
-const quota = @import("quota.zig");
+const quota = @import("./quota.zig");
 
 pub const TrustResolver = struct {
     context: ?*anyopaque,

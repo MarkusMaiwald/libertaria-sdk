@@ -13,7 +13,7 @@
 //! Kenya-compliant: Works through DNS-only firewalls.
 
 const std = @import("std");
-const png = @import("png.zig");
+const png = @import("./png.zig");
 
 /// Dictionary words for low-entropy subdomain labels
 /// Avoids Base32/Base64 patterns that trigger DPI alerts

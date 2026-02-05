@@ -3,7 +3,8 @@
 
 const std = @import("std");
 const net = std.net;
-const lwf = @import("l0_transport");
+const l0_transport = @import("l0_transport");
+const lwf = l0_transport.lwf;
 
 pub const VERSION: u32 = 2;
 pub const SERVICE_TYPE: u16 = lwf.LWFHeader.ServiceType.IDENTITY_SIGNAL;

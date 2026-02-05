@@ -15,26 +15,23 @@ pub const Handshake = struct {
         ctx: anytype,
     ) !Session {
         // TODO: Implement PQxdh initiation
-        _ = peer_did;
-        _ = config;
         _ = ctx;
-        
+
         var session = Session.new(peer_did, config);
         session.state = .handshake_initiated;
         return session;
     }
     
     /// Resume existing session
-    pub fn resume(
+    pub fn resumeSession(
         peer_did: []const u8,
         stored: StoredSession,
         ctx: anytype,
     ) !Session {
         // TODO: Implement fast resumption
-        _ = peer_did;
         _ = stored;
         _ = ctx;
-        
+
         return Session.new(peer_did, .{});
     }
     
@@ -46,9 +43,8 @@ pub const Handshake = struct {
     ) !Session {
         // TODO: Implement PQxdh response
         _ = request;
-        _ = config;
         _ = ctx;
-        
+
         return Session.new("", config);
     }
 };

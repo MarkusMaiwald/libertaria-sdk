@@ -4,7 +4,7 @@ const std = @import("std");
 const node_mod = @import("node.zig");
 const config_mod = @import("config.zig");
 
-const control_mod = @import("control");
+const control_mod = @import("control.zig");
 const tui_app = @import("tui/app.zig");
 
 pub fn main() !void {

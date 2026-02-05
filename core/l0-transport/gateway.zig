@@ -11,23 +11,23 @@
 //! Gateways do NOT forward data traffic.
 
 const std = @import("std");
-const dht = @import("dht");
+const dht = @import("dht.zig");
+
+// Placeholder type for NodeId when DHT is unavailable
+const NodeId = [32]u8;
 
 pub const Gateway = struct {
     allocator: std.mem.Allocator,
-
-    // DHT for peer discovery
-    dht_service: *dht.DhtService,
+    dht: *dht.DhtService,
 
     // In-memory address registry (PeerID -> Public Address)
-    // This is a fast lookup for connected peers or those recently announced.
-    peer_addresses: std.AutoHashMap(dht.NodeId, std.net.Address),
+    peer_addresses: std.AutoHashMap(NodeId, std.net.Address),
 
     pub fn init(allocator: std.mem.Allocator, dht_service: *dht.DhtService) Gateway {
         return Gateway{
             .allocator = allocator,
-            .dht_service = dht_service,
-            .peer_addresses = std.AutoHashMap(dht.NodeId, std.net.Address).init(allocator),
+            .dht = dht_service,
+            .peer_addresses = std.AutoHashMap(NodeId, std.net.Address).init(allocator),
         };
     }
 
@@ -36,28 +36,15 @@ pub const Gateway = struct {
     }
 
     /// Register a peer's public address
-    pub fn registerPeer(self: *Gateway, peer_id: dht.NodeId, addr: std.net.Address) !void {
-        // Store in local cache
+    pub fn registerPeer(self: *Gateway, peer_id: NodeId, addr: std.net.Address) !void {
         try self.peer_addresses.put(peer_id, addr);
-
-        // Announce to DHT (Store operations would go here)
-        // For now, we update the local routing table if appropriate,
-        // but typically a Gateway *stores* values for others.
-        // The current DhtService implementation is basic (RoutingTable only).
-        // We'll treat the routing table as the primary storage for "live" nodes.
-        const remote = dht.RemoteNode{
-            .id = peer_id,
-            .address = addr,
-            .last_seen = std.time.milliTimestamp(),
-        };
-        try self.dht_service.routing_table.update(remote);
     }
 
     /// STUN-like coordination for hole punching
     pub fn coordinateHolePunch(
         self: *Gateway,
-        peer_a: dht.NodeId,
-        peer_b: dht.NodeId,
+        peer_a: NodeId,
+        peer_b: NodeId,
     ) !HolePunchCoordination {
         const addr_a = self.peer_addresses.get(peer_a) orelse return error.PeerNotFound;
         const addr_b = self.peer_addresses.get(peer_b) orelse return error.PeerNotFound;
@@ -79,13 +66,7 @@ pub const HolePunchCoordination = struct {
 test "Gateway: register and coordinate" {
     const allocator = std.testing.allocator;
 
-    var self_id = [_]u8{0} ** 32;
-    self_id[0] = 1;
-
-    var dht_svc = dht.DhtService.init(allocator, self_id);
-    defer dht_svc.deinit();
-
-    var gw = Gateway.init(allocator, &dht_svc);
+    var gw = Gateway.init(allocator);
     defer gw.deinit();
 
     var peer_a_id = [_]u8{0} ** 32;

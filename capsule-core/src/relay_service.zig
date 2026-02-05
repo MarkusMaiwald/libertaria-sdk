@@ -4,8 +4,9 @@
 //! and forwards them to the next hop in the circuit.
 
 const std = @import("std");
-const relay_mod = @import("relay");
-const dht_mod = @import("dht");
+const l0_transport = @import("l0_transport");
+const relay_mod = l0_transport.relay;
+const dht_mod = l0_transport.dht;
 
 pub const RelayService = struct {
     pub const SessionContext = struct {

@@ -1,0 +1,256 @@
+const std = @import("std");
+
+pub fn build(b: *std.Build) void {
+    const target = b.standardTargetOptions(.{});
+    const optimize = b.standardOptimizeOption(.{});
+
+    // ========================================================================
+    // CORE MODULES (L0-L3) - Commonwealth License
+    // ========================================================================
+    
+    // L0: Transport Layer - exports all transport functionality via mod.zig
+    const l0_mod = b.createModule(.{
+        .root_source_file = b.path("core/l0-transport/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // Argon2 Library (shared by L1 tests and examples)
+    const argon2_mod = b.createModule(.{
+        .root_source_file = b.path("vendor/argon2/include/argon2.h"),
+        .target = target,
+        .optimize = optimize,
+    });
+    argon2_mod.addCSourceFiles(.({
+        .files = &.{
+            "vendor/argon2/src/argon2.c",
+            "vendor/argon2/src/core.c",
+            "vendor/argon2/src/blake2/blake2b.c",
+            "vendor/argon2/src/thread.c",
+            "vendor/argon2/src/encoding.c",
+            "vendor/argon2/src/opt.c",
+        },
+        .flags = &.{
+            "-std=c99",
+            "-O3",
+            "-fPIC",
+            "-DHAVE_PTHREAD",
+        },
+    });
+
+    // Create the static library from the module
+    const argon2_lib = b.addLibrary(.{
+        .name = "argon2",
+        .root_module = argon2_mod,
+        .linkage = .static,
+    });
+    argon2_lib.addCSourceFiles(.({
+        .files = &.{
+            "vendor/argon2/src/argon2.c",
+            "vendor/argon2/src/core.c",
+            "vendor/argon2/src/blake2/blake2b.c",
+            "vendor/argon2/src/thread.c",
+            "vendor/argon2/src/encoding.c",
+            "vendor/argon2/src/opt.c",
+        },
+        .flags = &.{"-std=c99", "-O3", "-fPIC", "-DHAVE_PTHREAD"},
+    });
+    argon2_lib.addIncludePath(b.path("vendor/argon2/include"));
+    argon2_lib.linkLibC();
+
+    // L1: Identity Layer - exports all identity/crypto via mod.zig
+    const l1_mod = b.createModule(.{
+        .root_source_file = b.path("core/l1-identity/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l1_mod.addImport("l0_transport", l0_mod);
+
+    // L2: Session Layer
+    const l2_session_mod = b.createModule(.{
+        .root_source_file = b.path("core/l2_session/mod.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // L2: Federation
+    const l2_federation_mod = b.createModule(.{
+        .root_source_file = b.path("core/l2-federation/bridge.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // L2: Membrane/Policy
+    const l2_membrane_mod = b.createModule(.{
+        .root_source_file = b.path("core/l2-membrane/policy.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    l2_membrane_mod.addImport("l0_transport", l0_mod);
+
+    // ========================================================================
+    // SDK MODULES (L4+) - Sovereign License
+    // ========================================================================
+    
+    // L4: Feed (Temporal Event Store)
+    const l4_feed_mod = b.createModule(.{
+        .root_source_file = b.path("sdk/l4-feed/feed.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    // ========================================================================
+    // TESTS - Core Components
+    // ========================================================================
+    
+    // Test: L0 Transport
+    const l0_test = b.addTest(.{
+        .root_module = l0_mod,
+    });
+    const run_l0_test = b.addRunArtifact(l0_test);
+    
+    // Test: L1 Identity
+    const l1_test = b.addTest(.{
+        .root_module = l1_mod,
+    });
+    l1_test.linkLibC();
+    l1_test.linkLibrary(argon2_lib);
+    l1_test.addIncludePath(b.path("vendor/liboqs/install/include"));
+    l1_test.addLibraryPath(b.path("vendor/liboqs/install/lib"));
+    l1_test.linkSystemLibrary("oqs");
+    l1_test.addIncludePath(b.path("vendor/argon2/include"));
+    const run_l1_test = b.addRunArtifact(l1_test);
+
+    // Test: L2 Session
+    const l2_session_test = b.addTest(.{
+        .root_module = l2_session_mod,
+    });
+    const run_l2_session_test = b.addRunArtifact(l2_session_test);
+
+    // Test: L4 Feed
+    const l4_feed_test = b.addTest(.{
+        .root_module = l4_feed_mod,
+    });
+    l4_feed_test.linkLibC();
+    const run_l4_feed_test = b.addRunArtifact(l4_feed_test);
+
+    // ========================================================================
+    // TEST STEP
+    // ========================================================================
+    const test_step = b.step("test", "Run all SDK tests");
+    test_step.dependOn(&run_l0_test.step);
+    test_step.dependOn(&run_l1_test.step);
+    test_step.dependOn(&run_l2_session_test.step);
+    test_step.dependOn(&run_l4_feed_test.step);
+
+    // ========================================================================
+    // EXAMPLES - Unbound License
+    // ========================================================================
+    
+    // Example: LWF Usage
+    const lwf_example_mod = b.createModule(.{
+        .root_source_file = b.path("apps/examples/lwf_example.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    lwf_example_mod.addImport("l0_transport", l0_mod);
+    
+    const lwf_example = b.addExecutable(.{
+        .name = "lwf_example",
+        .root_module = lwf_example_mod,
+    });
+    b.installArtifact(lwf_example);
+
+    // Example: Crypto Usage
+    const crypto_example_mod = b.createModule(.{
+        .root_source_file = b.path("apps/examples/crypto_example.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    crypto_example_mod.addImport("l1_identity", l1_mod);
+    
+    const crypto_example = b.addExecutable(.{
+        .name = "crypto_example",
+        .root_module = crypto_example_mod,
+    });
+    crypto_example.linkLibC();
+    crypto_example.linkLibrary(argon2_lib);
+    crypto_example.addIncludePath(b.path("vendor/liboqs/install/include"));
+    crypto_example.addLibraryPath(b.path("vendor/liboqs/install/lib"));
+    crypto_example.linkSystemLibrary("oqs");
+    crypto_example.addIncludePath(b.path("vendor/argon2/include"));
+    b.installArtifact(crypto_example);
+
+    // Examples step
+    const examples_step = b.step("examples", "Build example programs");
+    examples_step.dependOn(&b.addInstallArtifact(lwf_example, .{}).step);
+    examples_step.dependOn(&b.addInstallArtifact(crypto_example, .{}).step);
+
+    // ========================================================================
+    // LIBRARIES
+    // ========================================================================
+    
+    // QVL FFI Static Library (for external language bindings)
+    const qvl_ffi_mod = b.createModule(.{
+        .root_source_file = b.path("core/l1-identity/qvl_ffi.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    qvl_ffi_mod.addImport("l1_identity", l1_mod);
+    qvl_ffi_mod.addImport("l0_transport", l0_mod);
+    
+    const qvl_ffi_lib = b.addLibrary(.{
+        .name = "qvl_ffi",
+        .root_module = qvl_ffi_mod,
+        .linkage = .static,
+    });
+    qvl_ffi_lib.linkLibC();
+    b.installArtifact(qvl_ffi_lib);
+
+    // ========================================================================
+    // CAPSULE NODE (Reference Implementation)
+    // ========================================================================
+    
+    const vaxis_dep = b.dependency("vaxis", .{});
+    const vaxis_mod = vaxis_dep.module("vaxis");
+
+    const capsule_mod = b.createModule(.{
+        .root_source_file = b.path("capsule-core/src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+    
+    // Link all core modules
+    capsule_mod.addImport("l0_transport", l0_mod);
+    capsule_mod.addImport("l1_identity", l1_mod);
+    capsule_mod.addImport("l2_session", l2_session_mod);
+    capsule_mod.addImport("l2_federation", l2_federation_mod);
+    capsule_mod.addImport("l2_membrane", l2_membrane_mod);
+    capsule_mod.addImport("l4_feed", l4_feed_mod);
+    capsule_mod.addImport("vaxis", vaxis_mod);
+    
+    const capsule_exe = b.addExecutable(.{
+        .name = "capsule",
+        .root_module = capsule_mod,
+    });
+    
+    // System libraries
+    capsule_exe.linkLibC();
+    capsule_exe.linkSystemLibrary("sqlite3");
+    capsule_exe.linkSystemLibrary("duckdb");
+    capsule_exe.linkLibrary(argon2_lib);
+    capsule_exe.addIncludePath(b.path("vendor/liboqs/install/include"));
+    capsule_exe.addLibraryPath(b.path("vendor/liboqs/install/lib"));
+    capsule_exe.linkSystemLibrary("oqs");
+    capsule_exe.addIncludePath(b.path("vendor/argon2/include"));
+    
+    b.installArtifact(capsule_exe);
+
+    // Run command: zig build run -- args
+    const run_capsule = b.addRunArtifact(capsule_exe);
+    if (b.args) |args| {
+        run_capsule.addArgs(args);
+    }
+    const run_step = b.step("run", "Run the Capsule Node");
+    run_step.dependOn(&run_capsule.step);
+}

@@ -5,7 +5,7 @@
 //! consistency and preventing race conditions in the Reality Tunnel.
 
 const std = @import("std");
-const manifest = @import("manifest.zig");
+const manifest = @import("./manifest.zig");
 
 /// Sorts a slice of PacketSummaries deterministically.
 /// Ordering Doctrine:

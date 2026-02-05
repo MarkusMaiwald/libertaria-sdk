@@ -41,8 +41,8 @@ end
 test "Default configuration is valid" do
     const config = SessionConfig{};
     
-    try testing.expectEqual(@as(u64, 24), config.ttl.hours);
-    try testing.expectEqual(@as(u64, 30), config.heartbeat_interval.seconds);
+    try testing.expectEqual(@as(u64, 24), config.ttl.hrs);
+    try testing.expectEqual(@as(u64, 30), config.heartbeat_interval.secs);
     try testing.expectEqual(@as(u8, 3), config.heartbeat_tolerance);
-    try testing.expectEqual(@as(u64, 5), config.handshake_timeout.seconds);
+    try testing.expectEqual(@as(u64, 5), config.handshake_timeout.secs);
 end

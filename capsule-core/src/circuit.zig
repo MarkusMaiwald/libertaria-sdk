@@ -3,8 +3,9 @@
 //! Orchestrates the selection of relays via QVL and the construction of onion packets.
 
 const std = @import("std");
-const relay = @import("relay");
-const dht = @import("dht");
+const l0_transport = @import("l0_transport");
+const relay = l0_transport.relay;
+const dht = l0_transport.dht;
 const crypto = std.crypto;
 const QvlStore = @import("qvl_store.zig").QvlStore;
 const PeerTable = @import("peer_table.zig").PeerTable;

@@ -13,7 +13,7 @@ pub const lwf = @import("lwf.zig");
 pub const time = @import("time.zig");
 
 // Re-export UTCP (UDP Transport)
-pub const utcp = @import("utcp/utcp.zig");
+pub const utcp = @import("utcp/socket.zig");
 
 // Re-export OPQ (Offline Packet Queue)
 pub const opq = @import("opq.zig");
@@ -32,6 +32,18 @@ pub const noise = @import("noise.zig");
 
 // Re-export Polymorphic Noise Generator (traffic shaping)
 pub const png = @import("png.zig");
+
+// Re-export DHT (Distributed Hash Table)
+pub const dht = @import("dht.zig");
+
+// Re-export Gateway (NAT traversal)
+pub const gateway = @import("gateway.zig");
+
+// Re-export Relay (Onion routing)
+pub const relay = @import("relay.zig");
+
+// Re-export Quarantine (Security lockdown)
+pub const quarantine = @import("quarantine.zig");
 
 test {
     std.testing.refAllDecls(@This());

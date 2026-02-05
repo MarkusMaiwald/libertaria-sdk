@@ -11,6 +11,11 @@ pub const argon2 = @import("argon2.zig");
 pub const pqxdh = @import("pqxdh.zig");
 pub const prekey = @import("prekey.zig");
 pub const slash = @import("slash.zig");
+pub const trust_graph = @import("trust_graph.zig");
+pub const proof_of_path = @import("proof_of_path.zig");
+
+// Note: qvl_ffi is intentionally NOT exported here to avoid circular dependency
+// qvl_ffi is built as a separate library and imports from this module
 
 test {
     std.testing.refAllDecls(@This());

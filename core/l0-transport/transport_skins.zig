@@ -5,10 +5,10 @@
 
 
 const std = @import("std");
-const png = @import("png.zig");
-const mimic_dns = @import("mimic_dns.zig");
-const mimic_https = @import("mimic_https.zig");
-const mimic_quic = @import("mimic_quic.zig");
+const png = @import("./png.zig");
+const mimic_dns = @import("./mimic_dns.zig");
+const mimic_https = @import("./mimic_https.zig");
+const mimic_quic = @import("./mimic_quic.zig");
 
 pub const TransportSkin = union(enum) {
     raw: RawSkin,

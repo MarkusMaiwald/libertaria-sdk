@@ -16,9 +16,10 @@
 //! ]
 
 const std = @import("std");
-const trust_graph = @import("trust_graph");
-const time = @import("time");
-const soulkey = @import("soulkey");
+const trust_graph = @import("trust_graph.zig");
+const l0_transport = @import("l0_transport");
+const time = l0_transport.time;
+const soulkey = @import("soulkey.zig");
 
 pub const PathVerdict = enum {
     /// Path is valid and active

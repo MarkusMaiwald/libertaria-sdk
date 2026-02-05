@@ -147,7 +147,8 @@ pub const STANDARD_CONFIG = struct {
 /// **Kenya Compliance:** Target <100ms for difficulty 8-14 on ARM Cortex-A53
 ///
 /// **Constant-Time:** Argon2id is designed to be constant-time against timing attacks
-pub fn create(data: []const u8, difficulty: u8, allocator: std.mem.Allocator) !EntropyStamp {
+pub fn create(data: []const u8, difficulty: u8, _allocator: std.mem.Allocator) !EntropyStamp {
+    _ = _allocator; // Reserved for future use
     // Validate difficulty range
     if (difficulty < 8 or difficulty > 20) {
         return error.DifficultyOutOfRange;

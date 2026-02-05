@@ -3,8 +3,8 @@
 //! Provides bandwidth-efficient triage of queued packets.
 
 const std = @import("std");
-const merkle = @import("merkle.zig");
-const quota = @import("quota.zig");
+const merkle = @import("./merkle.zig");
+const quota = @import("./quota.zig");
 
 pub const Priority = enum(u8) {
     low = 0,

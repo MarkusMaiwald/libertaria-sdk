@@ -5,7 +5,8 @@ const std = @import("std");
 const c = @cImport({
     @cInclude("sqlite3.h");
 });
-const dht = @import("dht");
+const l0_transport = @import("l0_transport");
+const dht = l0_transport.dht;
 
 pub const RemoteNode = dht.RemoteNode;
 pub const ID_LEN = dht.ID_LEN;

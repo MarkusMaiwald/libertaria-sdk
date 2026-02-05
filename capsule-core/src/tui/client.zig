@@ -2,7 +2,7 @@
 //! Wraps control.zig types with deep-copying logic for memory safety.
 
 const std = @import("std");
-const control = @import("control");
+const control = @import("../control.zig");
 
 pub const NodeStatus = control.NodeStatus;
 pub const SlashEvent = control.SlashEvent;

@@ -14,11 +14,12 @@ pub const QvlError = error{
     ExtensionLoadFailed,
 };
 
-const slash_mod = @import("l1_identity").slash;
+const l1_identity = @import("l1_identity");
+const slash_mod = l1_identity.slash;
 const SlashReason = slash_mod.SlashReason;
 const SlashSeverity = slash_mod.SlashSeverity;
 
-const qvl_types = @import("qvl").types;
+const qvl_types = l1_identity.qvl.types;
 pub const NodeId = qvl_types.NodeId;
 pub const RiskEdge = qvl_types.RiskEdge;
 

@@ -9,7 +9,7 @@
 //! until convergence (delta < epsilon). Output: per-node anomaly scores.
 
 const std = @import("std");
-const time = @import("time");
+const l0_transport = @import("l0_transport");
 const types = @import("types.zig");
 
 const NodeId = types.NodeId;
@@ -229,8 +229,8 @@ test "BP: Converges on clean graph" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.8, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.7, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.8, .timestamp = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = 0.7, .timestamp = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot) });
 
     var result = try runInference(&graph, .{}, allocator);
     defer result.deinit();
@@ -249,9 +249,9 @@ test "BP: Detects suspicious node" {
     try graph.addNode(1);
     try graph.addNode(2);
 
-    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.9, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) });
-    try graph.addEdge(.{ .from = 0, .to = 2, .risk = -0.5, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal
-    try graph.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal
+    try graph.addEdge(.{ .from = 0, .to = 1, .risk = 0.9, .timestamp = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 3, .expires_at = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot) });
+    try graph.addEdge(.{ .from = 0, .to = 2, .risk = -0.5, .timestamp = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal
+    try graph.addEdge(.{ .from = 1, .to = 2, .risk = -0.3, .timestamp = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot), .nonce = 0, .level = 1, .expires_at = l0_transport.time.SovereignTimestamp.fromSeconds(0, .system_boot) }); // Betrayal
 
     var result = try runInference(&graph, .{ .max_iterations = 50 }, allocator);
     defer result.deinit();

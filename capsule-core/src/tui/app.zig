@@ -4,7 +4,7 @@
 const std = @import("std");
 const vaxis = @import("vaxis");
 
-const control = @import("control");
+const control = @import("../control.zig");
 const client_mod = @import("client.zig");
 const view_mod = @import("view.zig");
 

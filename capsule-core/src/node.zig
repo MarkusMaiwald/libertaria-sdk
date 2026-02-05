@@ -3,36 +3,30 @@
 
 const std = @import("std");
 const config_mod = @import("config.zig");
-const l0 = @import("l0_transport");
-// access UTCP from l0 or utcp module directly
-// build.zig imports "utcp" into capsule
-const utcp_mod = @import("utcp");
-const soulkey_mod = @import("soulkey");
-// qvl module
-const qvl = @import("qvl");
+const l0_transport = @import("l0_transport");
+const l1_identity = @import("l1_identity");
+const l2_membrane = @import("l2_membrane");
 
 const discovery_mod = @import("discovery.zig");
 const peer_table_mod = @import("peer_table.zig");
 const fed = @import("federation.zig");
-const dht_mod = @import("dht");
-const gateway_mod = @import("gateway");
 const storage_mod = @import("storage.zig");
 const qvl_store_mod = @import("qvl_store.zig");
-const control_mod = @import("control");
-const quarantine_mod = @import("quarantine");
+const control_mod = @import("control.zig");
 const circuit_mod = @import("circuit.zig");
 const relay_service_mod = @import("relay_service.zig");
-const policy_mod = @import("policy");
 
 const NodeConfig = config_mod.NodeConfig;
-const UTCP = utcp_mod.UTCP;
-// SoulKey definition
-const SoulKey = soulkey_mod.SoulKey;
-const RiskGraph = qvl.types.RiskGraph;
+const UTCP = l0_transport.utcp.UTCP;
+const SoulKey = l1_identity.soulkey.SoulKey;
+const RiskGraph = l1_identity.qvl.types.RiskGraph;
+const DhtService = l0_transport.dht.DhtService;
+const Gateway = l0_transport.gateway.Gateway;
+const Quarantine = l0_transport.quarantine;
+const PolicyEngine = l2_membrane.PolicyEngine;
 const DiscoveryService = discovery_mod.DiscoveryService;
 const PeerTable = peer_table_mod.PeerTable;
 const PeerSession = fed.PeerSession;
-const DhtService = dht_mod.DhtService;
 const StorageService = storage_mod.StorageService;
 const QvlStore = qvl_store_mod.QvlStore;
 
@@ -61,10 +55,10 @@ pub const CapsuleNode = struct {
     peer_table: PeerTable,
     sessions: std.HashMap(std.net.Address, PeerSession, AddressContext, std.hash_map.default_max_load_percentage),
     dht: DhtService,
-    gateway: ?gateway_mod.Gateway,
+    gateway: ?Gateway,
     relay_service: ?relay_service_mod.RelayService,
     circuit_builder: ?circuit_mod.CircuitBuilder,
-    policy_engine: policy_mod.PolicyEngine,
+    policy_engine: PolicyEngine,
     thread_pool: std.Thread.Pool,
     state_mutex: std.Thread.Mutex,
     storage: *StorageService,
@@ -73,7 +67,7 @@ pub const CapsuleNode = struct {
     identity: SoulKey,
 
     running: bool,
-    global_state: quarantine_mod.GlobalState,
+    global_state: Quarantine.GlobalState,
     dht_timer: i64 = 0,
     qvl_timer: i64 = 0,
 
@@ -100,12 +94,12 @@ pub const CapsuleNode = struct {
         const discovery = try DiscoveryService.init(allocator, config.port);
 
         // Initialize DHT
-        var node_id: dht_mod.NodeId = [_]u8{0} ** 32;
+        var node_id: l0_transport.dht.NodeId = [_]u8{0} ** 32;
         // TODO: Generate real NodeID from Public Key
         std.mem.copyForwards(u8, node_id[0..4], "NODE");
 
         // Initialize Policy Engine
-        const policy_engine = policy_mod.PolicyEngine.init(allocator);
+        const policy_engine = PolicyEngine.init(allocator);
 
         // Initialize Storage
         const db_path = try std.fs.path.join(allocator, &[_][]const u8{ config.data_dir, "capsule.db" });
@@ -189,14 +183,14 @@ pub const CapsuleNode = struct {
             .control_socket = control_socket,
             .identity = identity,
             .running = false,
-            .global_state = quarantine_mod.GlobalState{},
+            .global_state = Quarantine.GlobalState{},
         };
         // Initialize DHT in place
         self.dht = DhtService.init(allocator, node_id);
 
         // Initialize Gateway (now safe to reference self.dht)
         if (config.gateway_enabled) {
-            self.gateway = gateway_mod.Gateway.init(allocator, &self.dht);
+            self.gateway = Gateway.init(allocator, &self.dht);
             std.log.info("Gateway Service: ENABLED", .{});
         }
 
@@ -249,7 +243,7 @@ pub const CapsuleNode = struct {
         self.allocator.destroy(self);
     }
 
-    fn processFrame(self: *CapsuleNode, frame: l0.LWFFrame, sender: std.net.Address) void {
+    fn processFrame(self: *CapsuleNode, frame: l0_transport.lwf.LWFFrame, sender: std.net.Address) void {
         var f = frame;
         defer f.deinit(self.allocator);
 
@@ -261,7 +255,7 @@ pub const CapsuleNode = struct {
         }
 
         switch (f.header.service_type) {
-            l0.LWFHeader.ServiceType.RELAY_FORWARD => {
+            l0_transport.lwf.LWFHeader.ServiceType.RELAY_FORWARD => {
                 if (self.relay_service) |*rs| {
                     // Unwrap (Unlocked)
                     // Unwrap (Locked - protects Sessions Map)
@@ -290,10 +284,10 @@ pub const CapsuleNode = struct {
                             self.state_mutex.unlock();
 
                             if (next_remote) |remote| {
-                                var relay_frame = l0.LWFFrame.init(self.allocator, next_hop_data.payload.len) catch return;
+                                var relay_frame = l0_transport.lwf.LWFFrame.init(self.allocator, next_hop_data.payload.len) catch return;
                                 defer relay_frame.deinit(self.allocator);
                                 @memcpy(relay_frame.payload, next_hop_data.payload);
-                                relay_frame.header.service_type = l0.LWFHeader.ServiceType.RELAY_FORWARD;
+                                relay_frame.header.service_type = l0_transport.lwf.LWFHeader.ServiceType.RELAY_FORWARD;
 
                                 self.utcp.sendFrame(remote.address, &relay_frame, self.allocator) catch |err| {
                                     std.log.warn("Relay Send Error: {}", .{err});
@@ -484,7 +478,7 @@ pub const CapsuleNode = struct {
         };
     }
 
-    fn handleFederationMessage(self: *CapsuleNode, sender: std.net.Address, frame: l0.LWFFrame) !void {
+    fn handleFederationMessage(self: *CapsuleNode, sender: std.net.Address, frame: l0_transport.lwf.LWFFrame) !void {
         var fbs = std.io.fixedBufferStream(frame.payload);
         const msg = fed.FederationMessage.decode(fbs.reader(), self.allocator) catch |err| {
             std.log.warn("Failed to decode federation message from {f}: {}", .{ sender, err });
@@ -688,7 +682,7 @@ pub const CapsuleNode = struct {
                 response = .{ .LockdownStatus = try self.getLockdownStatus() };
             },
             .Airlock => |args| {
-                const state = std.meta.stringToEnum(quarantine_mod.AirlockState, args.state) orelse .Open;
+                const state = std.meta.stringToEnum(Quarantine.AirlockState, args.state) orelse .Open;
                 self.global_state.setAirlock(state);
                 std.log.info("AIRLOCK: State set to {s}", .{args.state});
                 response = .{ .LockdownStatus = try self.getLockdownStatus() };
@@ -746,10 +740,10 @@ pub const CapsuleNode = struct {
                         const encoded = try packet.encode(self.allocator);
                         defer self.allocator.free(encoded);
 
-                        var frame = try l0.LWFFrame.init(self.allocator, encoded.len);
+                        var frame = try l0_transport.lwf.LWFFrame.init(self.allocator, encoded.len);
                         defer frame.deinit(self.allocator);
                         @memcpy(frame.payload, encoded);
-                        frame.header.service_type = l0.LWFHeader.ServiceType.RELAY_FORWARD;
+                        frame.header.service_type = l0_transport.lwf.LWFHeader.ServiceType.RELAY_FORWARD;
 
                         try self.utcp.sendFrame(first_hop, &frame, self.allocator);
                         response = .{ .Ok = "Packet sent via Relay" };
@@ -971,7 +965,7 @@ pub const CapsuleNode = struct {
         try msg.encode(fbs.writer());
         const payload = fbs.getWritten();
 
-        var frame = try l0.LWFFrame.init(self.allocator, payload.len);
+        var frame = try l0_transport.lwf.LWFFrame.init(self.allocator, payload.len);
         defer frame.deinit(self.allocator);
 
         frame.header.service_type = fed.SERVICE_TYPE;
@@ -1003,7 +997,7 @@ pub const CapsuleNode = struct {
         const payload = fbs.getWritten();
 
         // Wrap in LWF
-        var frame = try l0.LWFFrame.init(self.allocator, payload.len);
+        var frame = try l0_transport.lwf.LWFFrame.init(self.allocator, payload.len);
         defer frame.deinit(self.allocator);
 
         frame.header.service_type = fed.SERVICE_TYPE;

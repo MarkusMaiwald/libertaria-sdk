@@ -9,16 +9,14 @@
 //! Orchestrates the flow: [Network] -> [UTCP] -> [OPQ] -> [Application]
 
 const std = @import("std");
-const utcp = @import("utcp");
-const opq = @import("opq");
-const lwf = @import("lwf");
-const quarantine = @import("quarantine");
+const utcp = @import("./utcp/socket.zig");
+const opq = @import("./opq.zig");
+const lwf = @import("./lwf.zig");
 
 pub const L0Service = struct {
     allocator: std.mem.Allocator,
     socket: utcp.UTCP,
     opq_manager: opq.OPQManager,
-    quarantine_list: quarantine.QuarantineList,
 
     /// Initialize the L0 service with a bound socket and storage
     pub fn init(allocator: std.mem.Allocator, address: std.net.Address, base_dir: []const u8, persona: opq.Persona, resolver: opq.trust_resolver.TrustResolver) !L0Service {
@@ -26,12 +24,10 @@ pub const L0Service = struct {
             .allocator = allocator,
             .socket = try utcp.UTCP.init(allocator, address),
             .opq_manager = try opq.OPQManager.init(allocator, base_dir, persona, resolver),
-            .quarantine_list = quarantine.QuarantineList.init(allocator),
         };
     }
 
     pub fn deinit(self: *L0Service) void {
-        self.quarantine_list.deinit();
         self.socket.deinit();
         self.opq_manager.deinit();
     }
@@ -53,7 +49,6 @@ pub const L0Service = struct {
         if (!frame.verifyChecksum()) return error.ChecksumMismatch;
 
         // 2. Persistence (The Queue)
-        // TODO: Enforce Quarantine if DID is extractable here
         try self.opq_manager.ingestFrame(&frame);
 
         return true;

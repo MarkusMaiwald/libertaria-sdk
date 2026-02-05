@@ -6,7 +6,7 @@
 //! race conditions in distributed state machines.
 
 const std = @import("std");
-const manifest = @import("manifest.zig");
+const manifest = @import("./manifest.zig");
 
 pub const ReorderBuffer = struct {
     allocator: std.mem.Allocator,

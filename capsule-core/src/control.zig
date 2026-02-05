@@ -2,7 +2,8 @@
 //! Uses a simple JSON-based request/response model over a Unix Domain Socket.
 
 const std = @import("std");
-const qvl = @import("qvl");
+const l1_identity = @import("l1_identity");
+const qvl = l1_identity.qvl;
 
 /// Commands sent from CLI to Daemon
 pub const Command = union(enum) {

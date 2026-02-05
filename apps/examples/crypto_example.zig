@@ -3,7 +3,7 @@
 //! This demonstrates basic usage of the L1 crypto layer.
 
 const std = @import("std");
-const crypto_mod = @import("../../core/l1-identity/crypto.zig");
+const crypto = @import("l1_identity").crypto;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -42,7 +42,7 @@ pub fn main() !void {
     std.debug.print("   Length: {} bytes\n\n", .{plaintext.len});
 
     // Encrypt
-    var encrypted = try crypto_mod.encryptPayload(
+    var encrypted = try crypto.encryptPayload(
         plaintext,
         recipient_public,
         sender_private,
@@ -65,7 +65,7 @@ pub fn main() !void {
     std.debug.print("   Total encrypted size: {} bytes\n\n", .{encrypted.size()});
 
     // Decrypt
-    const decrypted = try crypto_mod.decryptPayload(&encrypted, recipient_private, allocator);
+    const decrypted = try crypto.decryptPayload(&encrypted, recipient_private, allocator);
     defer allocator.free(decrypted);
 
     std.debug.print("4. Decrypted message:\n", .{});
@@ -90,12 +90,12 @@ pub fn main() !void {
     const world_message = "Hello, World Feed!";
     std.debug.print("   Original: \"{s}\"\n", .{world_message});
 
-    var world_encrypted = try crypto_mod.encryptWorld(world_message, sender_private, allocator);
+    var world_encrypted = try crypto.encryptWorld(world_message, sender_private, allocator);
     defer world_encrypted.deinit(allocator);
 
     std.debug.print("   Encrypted size: {} bytes\n", .{world_encrypted.size()});
 
-    const world_decrypted = try crypto_mod.decryptWorld(&world_encrypted, recipient_private, allocator);
+    const world_decrypted = try crypto.decryptWorld(&world_encrypted, recipient_private, allocator);
     defer allocator.free(world_decrypted);
 
     std.debug.print("   Decrypted: \"{s}\"\n", .{world_decrypted});
