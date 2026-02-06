@@ -8,7 +8,7 @@ const quota = @import("./quota.zig");
 const manifest = @import("./manifest.zig");
 const sequencer = @import("./sequencer.zig");
 const trust_resolver = @import("./trust_resolver.zig");
-const lwf = @import("../lwf.zig");
+const lwf = @import("lwf");
 
 pub const OPQManager = struct {
     allocator: std.mem.Allocator,

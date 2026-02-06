@@ -9,6 +9,7 @@ const std = @import("std");
 // LWF types are available directly via the lwf module import
 // (mod.zig IS the lwf module root in build.zig)
 pub const LWFHeader = @import("lwf.zig").LWFHeader;
+pub const LWFTrailer = @import("lwf.zig").LWFTrailer;
 pub const LWFFrame = @import("lwf.zig").LWFFrame;
 pub const LWFFlags = @import("lwf.zig").LWFFlags;
 pub const FrameClass = @import("lwf.zig").FrameClass;

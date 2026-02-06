@@ -10,7 +10,7 @@
 //! - Pruning works by deleting entire segment files (extremely fast).
 
 const std = @import("std");
-const lwf = @import("../lwf.zig");
+const lwf = @import("lwf");
 
 pub const SEGMENT_MAGIC: [4]u8 = "LOPQ".*;
 pub const SEGMENT_VERSION: u8 = 1;
